@@ -7796,7 +7796,7 @@ a.anchor-link {
 <!-- End of mermaid configuration --></head>
 <body class="jp-Notebook" data-jp-theme-light="true" data-jp-theme-name="JupyterLab Light">
 <main>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=2caa2e64">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=ae073b2b">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -7804,7 +7804,7 @@ a.anchor-link {
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
 <h1 id="Dengue-Early-Warning-for-Sri-Lankan-Districts">Dengue Early-Warning for Sri Lankan Districts<a class="anchor-link" href="#Dengue-Early-Warning-for-Sri-Lankan-Districts">¶</a></h1><h3 id="Predicting-high-transmission-dengue-weeks-two-weeks-ahead-with-tuned-tree-ensembles,-SHAP-and-LIME">Predicting high-transmission dengue weeks two weeks ahead with tuned tree ensembles, SHAP and LIME<a class="anchor-link" href="#Predicting-high-transmission-dengue-weeks-two-weeks-ahead-with-tuned-tree-ensembles,-SHAP-and-LIME">¶</a></h3><p><strong>Module:</strong> Applied Machine Learning – final assignment</p>
 <hr/>
-<h2 id="1.-Problem-statement">1. Problem statement<a class="anchor-link" href="#1.-Problem-statement">¶</a></h2><p>Dengue is Sri Lanka's biggest vector-borne disease. The 2017 epidemic caused more than 186,000 reported cases, and in 2023 more than 89,000 were reported.
+<h2 id="1.-Problem-statement">1. Problem statement<a class="anchor-link" href="#1.-Problem-statement">¶</a></h2><p>Dengue is Sri Lanka's biggest vector-borne disease. In this dataset, 174,687 cases were reported in 2017, the worst epidemic year, and 70,918 in 2023.
 The Epidemiology Unit publishes <strong>weekly case counts for the 26 RDHS areas</strong> (25 districts plus Kalmunai).
 Regional MOH offices and Public Health Inspectors respond to rising cases with vector-control work (fogging, larval source reduction and school/community clean-up drives).
 These campaigns need <strong>lead time</strong>, because staff, insecticide and community mobilisation have to be scheduled in advance.</p>
@@ -7829,6 +7829,10 @@ The threshold is the district's 75th percentile of weekly cases over 2012–2021
 <td>Epidemiology Unit, Ministry of Health Sri Lanka – <em>Weekly Epidemiological Report</em> (district dengue notifications)</td>
 </tr>
 <tr>
+<td><strong>How it was collected</strong></td>
+<td>The Epidemiology Unit publishes a <em>Weekly Epidemiological Report</em> (PDF) at epid.gov.lk with notified dengue cases per RDHS area. The <code>denguedatahub</code> package downloads these PDFs and extracts the tables into a tidy dataset</td>
+</tr>
+<tr>
 <td><strong>Access</strong></td>
 <td>Tidy version in the <code>denguedatahub</code> R package by Dr. Thiyanga S. Talagala, University of Sri Jayewardenepura (GitHub <code>thiyangt/denguedatahub</code>, object <code>srilanka_weekly_data</code>), exported to CSV</td>
 </tr>
@@ -7840,14 +7844,20 @@ The threshold is the district's 75th percentile of weekly cases over 2012–2021
 <td><strong>Columns</strong></td>
 <td><code>year</code>, <code>week</code>, <code>start.date</code>, <code>end.date</code>, <code>district</code>, <code>cases</code></td>
 </tr>
+<tr>
+<td><strong>Licence</strong></td>
+<td>GPL-3 (denguedatahub); the underlying reports are public government publications</td>
+</tr>
 </tbody>
 </table>
 <p>This is a new problem for this module. It doesn't reuse the car or house price datasets that are common in other projects.</p>
+<p><strong>Ethical data use.</strong> The data are <strong>aggregate weekly counts per health area</strong>, published by the Ministry of Health for public surveillance. They contain no names, addresses, ages or any other individual-level or personal data, and no single patient can be identified from a district's weekly count. No consent issue arises, and the dataset is shared openly under its licence.</p>
+<p><strong>Features and target (summary).</strong> Raw inputs: district, week and weekly case count. From these, 19 engineered features (§6.4) describe the recent level, momentum, season and national situation. The target <code>high_risk</code> is 1 when cases in week <em>t + 2</em> exceed the district's 75th-percentile threshold. After cleaning there are 26,260 district-weeks: 21,528 for development (2007–2023) and 3,146 for testing (2024–2026).</p>
 </div>
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=135fedaf">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=953a391b">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -7857,7 +7867,7 @@ The threshold is the district's 75th percentile of weekly cases over 2012–2021
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=096e49a1">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=d048034c">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -7929,7 +7939,7 @@ The threshold is the district's 75th percentile of weekly cases over 2012–2021
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=da1f9e9d">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=366d1f34">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -7939,7 +7949,7 @@ The threshold is the district's 75th percentile of weekly cases over 2012–2021
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=be22c7fb">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=e7ee6a85">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -8075,7 +8085,7 @@ memory usage: 2.1 MB
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=4cfe43a9">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=e497b2f3">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -8174,7 +8184,7 @@ Districts: 26
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=a5e1ee74">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=3389b9db">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -8210,7 +8220,7 @@ Districts: 26
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=d2beafe1">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=2e5ba49b">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -8226,7 +8236,7 @@ Districts: 26
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=89cc8f29">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=987d95e0">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -8236,7 +8246,7 @@ Districts: 26
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=308d3c6a">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=a4f5c60a">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -8270,7 +8280,7 @@ Districts: 26
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=7335a8fa">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=d1b4ee81">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -8300,7 +8310,7 @@ Districts: 26
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=dc80e4ed">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=539b6b07">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -8338,7 +8348,7 @@ Districts: 26
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=0494cd5d">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=cfb3c349">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -8370,7 +8380,7 @@ Districts: 26
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=4bf7c681">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=b1616fec">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -8456,7 +8466,7 @@ Mullaitivu   2009.0    0.0
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=1d76763c">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=c9d87a47">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -8472,7 +8482,7 @@ A single threshold for all districts would make no sense. This is why the target
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=aa17869a">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=b333e672">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -8510,7 +8520,7 @@ A single threshold for all districts would make no sense. This is why the target
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=eeb81711">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=c3d4df58">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -8539,7 +8549,7 @@ A single threshold for all districts would make no sense. This is why the target
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=641ab7be">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=5117540f">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -8573,7 +8583,7 @@ A single threshold for all districts would make no sense. This is why the target
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=68529a3a">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=31a911bb">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -8591,7 +8601,7 @@ A single threshold for all districts would make no sense. This is why the target
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=84cf6b01">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=e66cd09a">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -8601,7 +8611,7 @@ A single threshold for all districts would make no sense. This is why the target
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=02259be4">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=88b3e416">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -8702,7 +8712,7 @@ Imputed values (missing week + implausible values): 23
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=8ac49b42">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=dcee3886">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -8732,7 +8742,7 @@ Length: 1, dtype: str [2020]
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=5f69d1dd">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=113bc71d">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -9020,7 +9030,7 @@ NuwaraEliya    113.0
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=ff72ea1f">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=53cb0262">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -9040,7 +9050,7 @@ Every district-week whose features or target depend on them (106 rows) is <stron
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=d7cfcd3a">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=8424ebcf">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -9073,7 +9083,7 @@ Share of them in 2017: 73%
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=86e1776d">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=2fdc6854">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -9083,7 +9093,7 @@ Share of them in 2017: 73%
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=fbc02fc3">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=0d59182d">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -9181,7 +9191,7 @@ Share of them in 2017: 73%
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=6b4c142c">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=9d161dba">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -9191,7 +9201,7 @@ Share of them in 2017: 73%
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=0a7f9117">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=9f00e703">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -9463,7 +9473,7 @@ Share of them in 2017: 73%
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=6f77689c">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=aa4e2229">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -9492,7 +9502,7 @@ Share of them in 2017: 73%
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=1b6700bd">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=23b3bd8e">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -9508,7 +9518,7 @@ Share of them in 2017: 73%
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=79546e31">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=4f9c0e24">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -9614,7 +9624,7 @@ Hold-out point: [{'district': 'Colombo', 'date': Timestamp('2026-04-27 00:00:00'
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=e47ba873">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=e143a801">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -9645,7 +9655,7 @@ Hold-out point: [{'district': 'Colombo', 'date': Timestamp('2026-04-27 00:00:00'
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=7542d5da">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=afa2ede5">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -9661,7 +9671,7 @@ Hold-out point: [{'district': 'Colombo', 'date': Timestamp('2026-04-27 00:00:00'
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=9426e7d8">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=e1e0656f">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -9699,7 +9709,7 @@ rel_ma52        -0.57        0.84        -0.0        1.0
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=777cac92">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=794262a7">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -9709,7 +9719,7 @@ rel_ma52        -0.57        0.84        -0.0        1.0
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=9c67eafb">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=10b15889">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -9744,7 +9754,7 @@ rel_ma52        -0.57        0.84        -0.0        1.0
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=3222dbdb">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=1fd6d50e">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -9828,7 +9838,7 @@ rel_ma52        -0.57        0.84        -0.0        1.0
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=0cc6ad72">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=5c3538e8">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -9838,7 +9848,7 @@ rel_ma52        -0.57        0.84        -0.0        1.0
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=8dea8638">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=dd0074ea">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -9906,7 +9916,7 @@ rel_ma52        -0.57        0.84        -0.0        1.0
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=38034088">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=461dace2">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -9923,7 +9933,7 @@ Key design choices:</p>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=eea38f13">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=3a9f7bf1">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -10075,7 +10085,7 @@ Key design choices:</p>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=a64975f3">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=783f3f4c">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -10107,7 +10117,7 @@ Key design choices:</p>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=77333b29">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=d8013b39">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -10257,7 +10267,7 @@ Key design choices:</p>
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=01a87a35">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=dd7fb7e4">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -10267,7 +10277,7 @@ Key design choices:</p>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=03162360">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=67ba83e0">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -10465,7 +10475,7 @@ Key design choices:</p>
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=89de8ecc">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=70819dd2">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -10475,7 +10485,7 @@ Key design choices:</p>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=f1cd7bc6">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=c50695bc">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -10575,7 +10585,7 @@ Key design choices:</p>
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=8e5c2e55">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=7f71389f">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -10586,7 +10596,7 @@ Key design choices:</p>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=eb1ea830">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=1e36f3fc">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -10637,7 +10647,7 @@ SELECTED MODEL: LightGBM  (decision threshold = 0.59)
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=80813f79">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=15cc0488">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -10647,7 +10657,7 @@ SELECTED MODEL: LightGBM  (decision threshold = 0.59)
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=aae31ae9">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=de0bf0c7">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -10793,7 +10803,7 @@ SELECTED MODEL: LightGBM  (decision threshold = 0.59)
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=00437b37">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=7a7eca9d">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -10898,7 +10908,7 @@ SELECTED MODEL: LightGBM  (decision threshold = 0.59)
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=6c681f75">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=21311ea3">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -10936,7 +10946,7 @@ SELECTED MODEL: LightGBM  (decision threshold = 0.59)
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=e717604b">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=9bf2ba21">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -10970,7 +10980,7 @@ SELECTED MODEL: LightGBM  (decision threshold = 0.59)
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=866be314">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=72788b49">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -11154,7 +11164,7 @@ SELECTED MODEL: LightGBM  (decision threshold = 0.59)
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=251e188a">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=bd7f48db">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -11191,7 +11201,7 @@ SELECTED MODEL: LightGBM  (decision threshold = 0.59)
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=a14e81a8">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=538644f6">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -11257,7 +11267,112 @@ SELECTED MODEL: LightGBM  (decision threshold = 0.59)
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=b81b38ff">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=92a4501f">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="11.2-LightGBM:-the-new-algorithm-and-how-it-differs-from-standard-models">11.2 LightGBM: the new algorithm and how it differs from standard models<a class="anchor-link" href="#11.2-LightGBM:-the-new-algorithm-and-how-it-differs-from-standard-models">¶</a></h3><p><strong>What it is.</strong> LightGBM (<em>Light Gradient Boosting Machine</em>; Ke et al., NeurIPS 2017, Microsoft) is a gradient-boosted decision-tree algorithm. It builds trees <strong>one after another</strong>, and each new tree is fitted to the <strong>gradient of the loss</strong> (the remaining errors) of the ensemble so far. The final prediction is the sum of all trees, passed through a sigmoid to give a probability.</p>
+<p><strong>What makes it different from other boosting libraries:</strong></p>
+<ul>
+<li><strong>Histogram-based splitting:</strong> each feature is bucketed into at most 255 bins, so finding a split means scanning bins rather than every value. Training is much faster and uses less memory.</li>
+<li><strong>Leaf-wise (best-first) growth:</strong> it always splits the leaf that reduces the loss most, instead of growing a whole level at a time like XGBoost or classic trees. This is more accurate per tree, which is why <code>num_leaves</code> and <code>min_child_samples</code> must be tuned to control overfitting.</li>
+<li><strong>GOSS and EFB:</strong> gradient-based one-side sampling (keep rows with large errors, sample the rest) and exclusive feature bundling. Both are built-in speed-ups for large data. Here row bagging (<code>subsample</code>) was used instead of GOSS.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Decision tree</th>
+<th>Logistic regression</th>
+<th>k-NN</th>
+<th>Random Forest</th>
+<th><strong>LightGBM</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Model</td>
+<td>one tree</td>
+<td>linear in features</td>
+<td>stores training data</td>
+<td>many deep trees, averaged</td>
+<td>many small trees, <strong>added sequentially</strong></td>
+</tr>
+<tr>
+<td>Learns by</td>
+<td>greedy splits</td>
+<td>maximum likelihood</td>
+<td>none (lazy)</td>
+<td>bagging + random features</td>
+<td><strong>gradient descent in function space</strong></td>
+</tr>
+<tr>
+<td>Non-linear thresholds</td>
+<td>yes</td>
+<td>no (unless engineered)</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>Feature interactions</td>
+<td>yes</td>
+<td>no</td>
+<td>implicit</td>
+<td>yes</td>
+<td>yes, controlled by tree size</td>
+</tr>
+<tr>
+<td>Needs scaling</td>
+<td>no</td>
+<td>yes</td>
+<td>yes (distance-based)</td>
+<td>no</td>
+<td>no</td>
+</tr>
+<tr>
+<td>Class imbalance</td>
+<td>weights</td>
+<td>weights</td>
+<td>poor</td>
+<td>weights</td>
+<td><code>scale_pos_weight</code>, tuned</td>
+</tr>
+<tr>
+<td>Variance / overfitting</td>
+<td>high</td>
+<td>low</td>
+<td>depends on k</td>
+<td>low</td>
+<td>low with tuning (shrinkage, leaf limits)</td>
+</tr>
+<tr>
+<td>Speed on 20k rows</td>
+<td>fast</td>
+<td>fast</td>
+<td>slow to predict</td>
+<td>moderate</td>
+<td><strong>very fast</strong> (histograms)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Why it suits this problem</strong></p>
+<ol>
+<li>The EDA showed <strong>threshold-like, non-linear effects</strong>. Risk jumps once a district nears its threshold, which SHAP confirms in §12 (the S-curve). Linear models and k-NN capture this poorly.</li>
+<li><strong>Interactions</strong> matter: the same case level means more risk before the monsoon peak and during a national wave.</li>
+<li>Features are <strong>strongly collinear</strong> (lags and moving averages) and on different scales. Trees don't care about either.</li>
+<li><strong>Imbalanced, shifting classes:</strong> the positive rate goes from 7% to 82% between years. <code>scale_pos_weight</code> plus a CV-chosen threshold handles this.</li>
+<li><strong>Speed:</strong> 30 Optuna trials × 5 time-series folds take under 2 minutes, compared with about 10 minutes for Random Forest.</li>
+<li><strong>Exact explanations</strong> with TreeSHAP, both in the notebook and live in the app.</li>
+</ol>
+<p><strong>What tuning chose.</strong> <code>num_leaves = 4</code>, <code>min_child_samples = 206</code>, <code>learning_rate ≈ 0.010</code> with 500 trees, <code>colsample_bytree ≈ 0.53</code>, <code>scale_pos_weight ≈ 2.8</code>. That's <strong>many tiny trees with heavy shrinkage</strong>, close to an additive model with a few pairwise interactions. It's a low-variance configuration that generalises across epidemic and non-epidemic years, consistent with LightGBM having the best cross-validated PR-AUC.</p>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=f03f05c4">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -11267,7 +11382,7 @@ SELECTED MODEL: LightGBM  (decision threshold = 0.59)
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=c379ba7f">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=27eb517c">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -11304,7 +11419,7 @@ SELECTED MODEL: LightGBM  (decision threshold = 0.59)
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=c732530e">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=fcf4c76c">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -11330,7 +11445,7 @@ SELECTED MODEL: LightGBM  (decision threshold = 0.59)
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=8df1720d">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=3c857b3e">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -11428,7 +11543,7 @@ SELECTED MODEL: LightGBM  (decision threshold = 0.59)
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=fbf567b6">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=fa850a43">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -11459,7 +11574,7 @@ SELECTED MODEL: LightGBM  (decision threshold = 0.59)
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=c17deaa5">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=cfda9f6f">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -11491,7 +11606,7 @@ SELECTED MODEL: LightGBM  (decision threshold = 0.59)
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=68e30d68">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=1772691e">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -11513,7 +11628,7 @@ SELECTED MODEL: LightGBM  (decision threshold = 0.59)
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=af094d93">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=981feea1">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -11524,7 +11639,7 @@ SELECTED MODEL: LightGBM  (decision threshold = 0.59)
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=3d1d9b4a">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=ddeab5dc">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -11638,7 +11753,7 @@ SELECTED MODEL: LightGBM  (decision threshold = 0.59)
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=085c6cf8">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=66866188">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -11675,7 +11790,7 @@ SELECTED MODEL: LightGBM  (decision threshold = 0.59)
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=9c6abd37">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=b8819942">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -11716,7 +11831,7 @@ Features in all 5 runs: ['rel_lag1', 'rel_ma4', 'rel_now', 'share_districts_high
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=b14ce857">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=97fcbd0e">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -11842,7 +11957,7 @@ Features in all 5 runs: ['rel_lag1', 'rel_ma4', 'rel_now', 'share_districts_high
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=dac64440">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=5d1101bb">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -11868,7 +11983,7 @@ The dependence plots show an <strong>S-shaped response</strong>. Below about −
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=e62ca17e">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=61f16b1e">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -11878,7 +11993,7 @@ The dependence plots show an <strong>S-shaped response</strong>. Below about −
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=6f3d86c9">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=64912d4e">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -11922,7 +12037,7 @@ The dependence plots show an <strong>S-shaped response</strong>. Below about −
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=b3ce5044">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=d542bf05">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -11963,34 +12078,63 @@ Actual outcome     : 308 cases -&gt; HIGH RISK
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=e6382de9">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=b34c489e">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="14.-Conclusions,-limitations-and-future-work">14. Conclusions, limitations and future work<a class="anchor-link" href="#14.-Conclusions,-limitations-and-future-work">¶</a></h2><p><strong>Summary.</strong> Using 20 years of official Sri Lankan dengue surveillance data, I built a two-week-ahead early-warning classifier for all 26 RDHS areas.
+<h2 id="14.-Conclusions">14. Conclusions<a class="anchor-link" href="#14.-Conclusions">¶</a></h2><p><strong>Summary.</strong> Using 20 years of official Sri Lankan dengue surveillance data, I built a two-week-ahead early-warning classifier for all 26 RDHS areas.
 After a careful EDA, three kinds of data problem were found and handled (a missing week, a year of zeros recorded instead of missing values for Monaragala, and 22 implausible or misaligned weekly values).
 Nineteen leakage-free, scale-free features were engineered. Six model families were tuned with Optuna under expanding-window time-series cross-validation. The selected <strong>LightGBM</strong> model reaches <strong>ROC-AUC 0.88, PR-AUC 0.79, recall 0.81</strong> on 2½ years of unseen test data. It beats the persistence baseline by a statistically clear margin and provides explanations through SHAP and LIME that agree with each other.</p>
 <p><strong>Requirement → where it's met</strong></p>
 <ul>
-<li>Problem and local data: §1–2 · EDA: §5 · Preprocessing (imputation, outliers, transformation, scaling, split): §6</li>
-<li>RF, XGBoost, LightGBM, CatBoost, LR and stacking: §8–10 · Tuning: §9 · Evaluation and justification: §11</li>
-<li>SHAP and LIME: §12 · Saved model and hold-out inference: §13 · App: <code>app/app.py</code> · MLOps: <code>src/train.py</code>, <code>tests/</code>, <code>.github/workflows/</code></li>
+<li>Problem, local data and ethics: §1–2 · EDA: §5 · Preprocessing (imputation, outliers, transformation, scaling, split): §6</li>
+<li>RF, XGBoost, LightGBM, CatBoost, LR and stacking: §8–10 · New algorithm (LightGBM) and how it differs: §11.2 · Tuning: §9 · Evaluation and justification: §11</li>
+<li>SHAP and LIME: §12 · Critical discussion (limitations, data quality, bias, ethics): §15 · Saved model and hold-out inference: §13 · App: <code>app/app.py</code> · MLOps: <code>src/train.py</code>, <code>tests/</code>, <code>.github/workflows/</code></li>
 </ul>
-<p><strong>Limitations</strong></p>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=137dac29">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h2 id="15.-Critical-discussion">15. Critical discussion<a class="anchor-link" href="#15.-Critical-discussion">¶</a></h2><p><strong>Limitations of the model</strong></p>
 <ul>
-<li><strong>No weather data.</strong> District rainfall and temperature are known dengue drivers with a 2–8 week lag. They weren't available as an open district-weekly series, so seasonality and national momentum stand in for them.</li>
-<li><strong>Reported cases, not true infections.</strong> Labels reflect testing and reporting behaviour, for example the COVID-19 disruption in 2020–21 and the data errors found here. Some errors may remain undetected.</li>
-<li><strong>Fixed thresholds.</strong> The 75th percentile from 2012–2021 is one reasonable definition of "high transmission". Different thresholds (an epidemic channel, or mean + 2 SD) would change the task. The positive rate in the test period (34%) is higher than in training (20%), which reflects the post-2017 rise in dengue.</li>
-<li><strong>Probabilities aren't calibrated</strong> (see §11.1). Treat them as risk scores.</li>
+<li><strong>No weather inputs.</strong> District rainfall and temperature are known dengue drivers with a 2–8 week lag. They weren't available as an open district-weekly series, so seasonality and national momentum stand in for them.</li>
+<li><strong>Fixed thresholds.</strong> The 75th percentile for 2012–2021 is one reasonable definition of "high transmission". Others (an epidemic channel, or mean + 2 SD) would change the task. The test-period positive rate (34%) is higher than in training (20%), reflecting the post-2017 rise in dengue.</li>
+<li><strong>Probabilities aren't calibrated</strong> (§11.1). Treat them as risk scores.</li>
+<li><strong>Short-term persistence carries much of the signal.</strong> The model adds clear value over persistence (recall +10 points), but it can't foresee outbreaks that have no early signal in the counts.</li>
+</ul>
+<p><strong>Data quality issues</strong></p>
+<ul>
+<li><strong>A whole year recorded as zeros</strong> (Monaragala 2020), <strong>22 implausible or misaligned weekly values</strong> (including the week of 30 March 2026, when counts were shifted between districts), and one missing week. These were found during EDA and handled in §6.</li>
+<li><strong>Reported cases, not infections.</strong> Labels reflect testing, hospital access and reporting behaviour. For example, COVID-19 in 2020–21 disrupted health-seeking and reporting, and asymptomatic infections are never counted.</li>
+<li><strong>Reporting delay.</strong> Weekly reports can be revised later. The model uses the counts as published in the package.</li>
+</ul>
+<p><strong>Risks of bias or unfairness</strong></p>
+<ul>
+<li><strong>Uneven performance between districts.</strong> F1 is high in high-burden districts (Gampaha 0.90, Monaragala 0.88, Galle 0.83) but low where high weeks are rare (Vavuniya 0.22, Kurunegala 0.44, Mullaitivu 0.46, Kilinochchi 0.48). If used naively, the system would give <strong>weaker warnings to several Northern and North-Western areas</strong>. Those regions already have fewer health resources, so the model could widen an existing gap.</li>
+<li><strong>Reporting bias.</strong> Districts with better hospital access and laboratory testing report a larger share of true cases. Their thresholds and labels are therefore more reliable. Under-reporting areas look "normal" more often than they really are.</li>
+<li><strong>Mitigations used or recommended:</strong> per-district thresholds (used), per-district evaluation (§11, reported openly), district-specific decision thresholds or a lower alert threshold for low-burden districts, and keeping a human epidemiologist in the loop for every alert.</li>
+</ul>
+<p><strong>Real-world impact and ethical considerations</strong></p>
+<ul>
+<li><strong>Benefit:</strong> two weeks of warning lets MOH and PHI teams schedule fogging, larval-source reduction and community clean-ups before cases peak, which could reduce infections, hospital load and deaths.</li>
+<li><strong>Cost of errors:</strong> on the test period the model raised <strong>459 false alarms</strong>, which waste insecticide, staff time and public trust and add to environmental exposure and insecticide resistance. It <strong>missed 209 high weeks</strong>, which can mean late response and more illness. The decision threshold favours recall, because a missed outbreak usually costs more than a false alarm.</li>
+<li><strong>Decision support, not decision making.</strong> The model should support, never replace, the Epidemiology Unit's judgement. Automation bias (trusting a score blindly) is a real risk, which is why every prediction comes with a SHAP explanation in the app.</li>
+<li><strong>Privacy and governance.</strong> Only aggregate public data is used. Any operational deployment would need validation with the Epidemiology Unit, monitoring for drift (the weekly retraining has a quality gate), and clear communication that this is a research prototype, not an official alert system.</li>
 </ul>
 <p><strong>Future work</strong></p>
 <ol>
 <li>Add weekly district rainfall (Department of Meteorology) and Breteau/larval indices from the NDCU.</li>
 <li>Calibrate probabilities (isotonic regression on the validation years) and produce multi-horizon forecasts (1–4 weeks).</li>
 <li>Use MOH-area (sub-district) data where available, for more targeted response.</li>
-<li>Monitor live performance through the weekly retraining workflow, and re-estimate thresholds every few years.</li>
+<li>Set district-specific alert thresholds to equalise recall across regions.</li>
 </ol>
 </div>
 </div>

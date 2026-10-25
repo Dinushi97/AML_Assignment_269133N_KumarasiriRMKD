@@ -7,7 +7,7 @@
 # ---
 # ## 1. Problem statement
 #
-# Dengue is Sri Lanka's biggest vector-borne disease. The 2017 epidemic caused more than 186,000 reported cases, and in 2023 more than 89,000 were reported.
+# Dengue is Sri Lanka's biggest vector-borne disease. In this dataset, 174,687 cases were reported in 2017, the worst epidemic year, and 70,918 in 2023.
 # The Epidemiology Unit publishes **weekly case counts for the 26 RDHS areas** (25 districts plus Kalmunai).
 # Regional MOH offices and Public Health Inspectors respond to rising cases with vector-control work (fogging, larval source reduction and school/community clean-up drives).
 # These campaigns need **lead time**, because staff, insecticide and community mobilisation have to be scheduled in advance.
@@ -26,11 +26,17 @@
 # | | |
 # |---|---|
 # | **Source** | Epidemiology Unit, Ministry of Health Sri Lanka – *Weekly Epidemiological Report* (district dengue notifications) |
+# | **How it was collected** | The Epidemiology Unit publishes a *Weekly Epidemiological Report* (PDF) at epid.gov.lk with notified dengue cases per RDHS area. The `denguedatahub` package downloads these PDFs and extracts the tables into a tidy dataset |
 # | **Access** | Tidy version in the `denguedatahub` R package by Dr. Thiyanga S. Talagala, University of Sri Jayewardenepura (GitHub `thiyangt/denguedatahub`, object `srilanka_weekly_data`), exported to CSV |
 # | **Coverage** | 26 RDHS areas × weekly, 23 Dec 2006 – 17 May 2026 (26,311 rows) |
 # | **Columns** | `year`, `week`, `start.date`, `end.date`, `district`, `cases` |
+# | **Licence** | GPL-3 (denguedatahub); the underlying reports are public government publications |
 #
 # This is a new problem for this module. It doesn't reuse the car or house price datasets that are common in other projects.
+#
+# **Ethical data use.** The data are **aggregate weekly counts per health area**, published by the Ministry of Health for public surveillance. They contain no names, addresses, ages or any other individual-level or personal data, and no single patient can be identified from a district's weekly count. No consent issue arises, and the dataset is shared openly under its licence.
+#
+# **Features and target (summary).** Raw inputs: district, week and weekly case count. From these, 19 engineered features (§6.4) describe the recent level, momentum, season and national situation. The target `high_risk` is 1 when cases in week *t + 2* exceed the district's 75th-percentile threshold. After cleaning there are 26,260 district-weeks: 21,528 for development (2007–2023) and 3,146 for testing (2024–2026).
 
 # %% [markdown]
 # ## 3. Setup
@@ -660,6 +666,37 @@ fig.suptitle("Two-week-ahead forecasts on the test period", y=1.0); fig.tight_la
 # * Performance is lower in districts where high weeks are rare (Vavuniya, Kurunegala, Mullaitivu: F1 0.2–0.5). There, a few cases either way crosses the threshold. It's best in large, high-burden districts (Gampaha F1 0.90, Monaragala 0.88, Galle 0.83).
 
 # %% [markdown]
+# ### 11.2 LightGBM: the new algorithm and how it differs from standard models
+#
+# **What it is.** LightGBM (*Light Gradient Boosting Machine*; Ke et al., NeurIPS 2017, Microsoft) is a gradient-boosted decision-tree algorithm. It builds trees **one after another**, and each new tree is fitted to the **gradient of the loss** (the remaining errors) of the ensemble so far. The final prediction is the sum of all trees, passed through a sigmoid to give a probability.
+#
+# **What makes it different from other boosting libraries:**
+# * **Histogram-based splitting:** each feature is bucketed into at most 255 bins, so finding a split means scanning bins rather than every value. Training is much faster and uses less memory.
+# * **Leaf-wise (best-first) growth:** it always splits the leaf that reduces the loss most, instead of growing a whole level at a time like XGBoost or classic trees. This is more accurate per tree, which is why `num_leaves` and `min_child_samples` must be tuned to control overfitting.
+# * **GOSS and EFB:** gradient-based one-side sampling (keep rows with large errors, sample the rest) and exclusive feature bundling. Both are built-in speed-ups for large data. Here row bagging (`subsample`) was used instead of GOSS.
+#
+# | | Decision tree | Logistic regression | k-NN | Random Forest | **LightGBM** |
+# |---|---|---|---|---|---|
+# | Model | one tree | linear in features | stores training data | many deep trees, averaged | many small trees, **added sequentially** |
+# | Learns by | greedy splits | maximum likelihood | none (lazy) | bagging + random features | **gradient descent in function space** |
+# | Non-linear thresholds | yes | no (unless engineered) | yes | yes | yes |
+# | Feature interactions | yes | no | implicit | yes | yes, controlled by tree size |
+# | Needs scaling | no | yes | yes (distance-based) | no | no |
+# | Class imbalance | weights | weights | poor | weights | `scale_pos_weight`, tuned |
+# | Variance / overfitting | high | low | depends on k | low | low with tuning (shrinkage, leaf limits) |
+# | Speed on 20k rows | fast | fast | slow to predict | moderate | **very fast** (histograms) |
+#
+# **Why it suits this problem**
+# 1. The EDA showed **threshold-like, non-linear effects**. Risk jumps once a district nears its threshold, which SHAP confirms in §12 (the S-curve). Linear models and k-NN capture this poorly.
+# 2. **Interactions** matter: the same case level means more risk before the monsoon peak and during a national wave.
+# 3. Features are **strongly collinear** (lags and moving averages) and on different scales. Trees don't care about either.
+# 4. **Imbalanced, shifting classes:** the positive rate goes from 7% to 82% between years. `scale_pos_weight` plus a CV-chosen threshold handles this.
+# 5. **Speed:** 30 Optuna trials × 5 time-series folds take under 2 minutes, compared with about 10 minutes for Random Forest.
+# 6. **Exact explanations** with TreeSHAP, both in the notebook and live in the app.
+#
+# **What tuning chose.** `num_leaves = 4`, `min_child_samples = 206`, `learning_rate ≈ 0.010` with 500 trees, `colsample_bytree ≈ 0.53`, `scale_pos_weight ≈ 2.8`. That's **many tiny trees with heavy shrinkage**, close to an additive model with a few pairwise interactions. It's a low-variance configuration that generalises across epidemic and non-epidemic years, consistent with LightGBM having the best cross-validated PR-AUC.
+
+# %% [markdown]
 # ## 12. Explainability
 # ### 12.1 SHAP (global and local)
 
@@ -814,25 +851,44 @@ print(f"P(high risk)       : {p_ho:.3f}  -> predicted {'HIGH RISK' if p_ho >= lo
 print(f"Actual outcome     : {int(r['target_cases'])} cases -> {'HIGH RISK' if r['high_risk'] == 1 else 'normal'}")
 
 # %% [markdown]
-# ## 14. Conclusions, limitations and future work
+# ## 14. Conclusions
 #
 # **Summary.** Using 20 years of official Sri Lankan dengue surveillance data, I built a two-week-ahead early-warning classifier for all 26 RDHS areas.
 # After a careful EDA, three kinds of data problem were found and handled (a missing week, a year of zeros recorded instead of missing values for Monaragala, and 22 implausible or misaligned weekly values).
 # Nineteen leakage-free, scale-free features were engineered. Six model families were tuned with Optuna under expanding-window time-series cross-validation. The selected **LightGBM** model reaches **ROC-AUC 0.88, PR-AUC 0.79, recall 0.81** on 2½ years of unseen test data. It beats the persistence baseline by a statistically clear margin and provides explanations through SHAP and LIME that agree with each other.
 #
 # **Requirement → where it's met**
-# * Problem and local data: §1–2 · EDA: §5 · Preprocessing (imputation, outliers, transformation, scaling, split): §6
-# * RF, XGBoost, LightGBM, CatBoost, LR and stacking: §8–10 · Tuning: §9 · Evaluation and justification: §11
-# * SHAP and LIME: §12 · Saved model and hold-out inference: §13 · App: `app/app.py` · MLOps: `src/train.py`, `tests/`, `.github/workflows/`
+# * Problem, local data and ethics: §1–2 · EDA: §5 · Preprocessing (imputation, outliers, transformation, scaling, split): §6
+# * RF, XGBoost, LightGBM, CatBoost, LR and stacking: §8–10 · New algorithm (LightGBM) and how it differs: §11.2 · Tuning: §9 · Evaluation and justification: §11
+# * SHAP and LIME: §12 · Critical discussion (limitations, data quality, bias, ethics): §15 · Saved model and hold-out inference: §13 · App: `app/app.py` · MLOps: `src/train.py`, `tests/`, `.github/workflows/`
+
+# %% [markdown]
+# ## 15. Critical discussion
 #
-# **Limitations**
-# * **No weather data.** District rainfall and temperature are known dengue drivers with a 2–8 week lag. They weren't available as an open district-weekly series, so seasonality and national momentum stand in for them.
-# * **Reported cases, not true infections.** Labels reflect testing and reporting behaviour, for example the COVID-19 disruption in 2020–21 and the data errors found here. Some errors may remain undetected.
-# * **Fixed thresholds.** The 75th percentile from 2012–2021 is one reasonable definition of "high transmission". Different thresholds (an epidemic channel, or mean + 2 SD) would change the task. The positive rate in the test period (34%) is higher than in training (20%), which reflects the post-2017 rise in dengue.
-# * **Probabilities aren't calibrated** (see §11.1). Treat them as risk scores.
+# **Limitations of the model**
+# * **No weather inputs.** District rainfall and temperature are known dengue drivers with a 2–8 week lag. They weren't available as an open district-weekly series, so seasonality and national momentum stand in for them.
+# * **Fixed thresholds.** The 75th percentile for 2012–2021 is one reasonable definition of "high transmission". Others (an epidemic channel, or mean + 2 SD) would change the task. The test-period positive rate (34%) is higher than in training (20%), reflecting the post-2017 rise in dengue.
+# * **Probabilities aren't calibrated** (§11.1). Treat them as risk scores.
+# * **Short-term persistence carries much of the signal.** The model adds clear value over persistence (recall +10 points), but it can't foresee outbreaks that have no early signal in the counts.
+#
+# **Data quality issues**
+# * **A whole year recorded as zeros** (Monaragala 2020), **22 implausible or misaligned weekly values** (including the week of 30 March 2026, when counts were shifted between districts), and one missing week. These were found during EDA and handled in §6.
+# * **Reported cases, not infections.** Labels reflect testing, hospital access and reporting behaviour. For example, COVID-19 in 2020–21 disrupted health-seeking and reporting, and asymptomatic infections are never counted.
+# * **Reporting delay.** Weekly reports can be revised later. The model uses the counts as published in the package.
+#
+# **Risks of bias or unfairness**
+# * **Uneven performance between districts.** F1 is high in high-burden districts (Gampaha 0.90, Monaragala 0.88, Galle 0.83) but low where high weeks are rare (Vavuniya 0.22, Kurunegala 0.44, Mullaitivu 0.46, Kilinochchi 0.48). If used naively, the system would give **weaker warnings to several Northern and North-Western areas**. Those regions already have fewer health resources, so the model could widen an existing gap.
+# * **Reporting bias.** Districts with better hospital access and laboratory testing report a larger share of true cases. Their thresholds and labels are therefore more reliable. Under-reporting areas look "normal" more often than they really are.
+# * **Mitigations used or recommended:** per-district thresholds (used), per-district evaluation (§11, reported openly), district-specific decision thresholds or a lower alert threshold for low-burden districts, and keeping a human epidemiologist in the loop for every alert.
+#
+# **Real-world impact and ethical considerations**
+# * **Benefit:** two weeks of warning lets MOH and PHI teams schedule fogging, larval-source reduction and community clean-ups before cases peak, which could reduce infections, hospital load and deaths.
+# * **Cost of errors:** on the test period the model raised **459 false alarms**, which waste insecticide, staff time and public trust and add to environmental exposure and insecticide resistance. It **missed 209 high weeks**, which can mean late response and more illness. The decision threshold favours recall, because a missed outbreak usually costs more than a false alarm.
+# * **Decision support, not decision making.** The model should support, never replace, the Epidemiology Unit's judgement. Automation bias (trusting a score blindly) is a real risk, which is why every prediction comes with a SHAP explanation in the app.
+# * **Privacy and governance.** Only aggregate public data is used. Any operational deployment would need validation with the Epidemiology Unit, monitoring for drift (the weekly retraining has a quality gate), and clear communication that this is a research prototype, not an official alert system.
 #
 # **Future work**
 # 1. Add weekly district rainfall (Department of Meteorology) and Breteau/larval indices from the NDCU.
 # 2. Calibrate probabilities (isotonic regression on the validation years) and produce multi-horizon forecasts (1–4 weeks).
 # 3. Use MOH-area (sub-district) data where available, for more targeted response.
-# 4. Monitor live performance through the weekly retraining workflow, and re-estimate thresholds every few years.
+# 4. Set district-specific alert thresholds to equalise recall across regions.

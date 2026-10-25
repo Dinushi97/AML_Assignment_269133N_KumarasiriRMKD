@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dengue Early Warning for Sri Lankan Districts – Report</title>
+<style>
+  @page { size: A4; margin: 18mm 18mm 20mm 18mm; }
+  :root { --ink:#18222D; --muted:#4A5563; --accent:#B23A48; --line:#DED9CF; --soft:#F4F1EA; }
+  html { font-family: 'Bitstream Charter', 'Caladea', Georgia, serif; font-size: 10.6pt; line-height: 1.5; color: var(--ink); }
+  body { margin: 0; }
+  h1, h2, h3, .sans, table, figcaption, .meta, .kpi { font-family: 'Inter', 'DejaVu Sans', sans-serif; }
+  h1 { font-size: 22pt; line-height: 1.15; margin: 0 0 6pt; font-weight: 700; }
+  h2 { font-size: 13.5pt; margin: 18pt 0 6pt; font-weight: 700; color: var(--ink); border-bottom: 1.5pt solid var(--accent); padding-bottom: 3pt; break-after: avoid; }
+  h3 { font-size: 11pt; margin: 12pt 0 4pt; font-weight: 600; break-after: avoid; }
+  p { margin: 0 0 7pt; text-align: justify; hyphens: auto; }
+  ul, ol { margin: 0 0 7pt 0; padding-left: 16pt; }
+  li { margin-bottom: 2.5pt; }
+  .subtitle { font-size: 12pt; color: var(--muted); margin: 0 0 12pt; font-family: 'Inter', sans-serif; }
+  .meta { font-size: 9.5pt; color: var(--muted); border-top: 1pt solid var(--line); border-bottom: 1pt solid var(--line); padding: 6pt 0; margin-bottom: 12pt; display: flex; flex-wrap: wrap; gap: 4pt 18pt; }
+  .abstract { background: var(--soft); border-left: 3pt solid var(--accent); padding: 8pt 11pt; margin: 0 0 10pt; }
+  .abstract p { margin: 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 8.6pt; margin: 4pt 0 9pt; break-inside: avoid; }
+  th { text-align: left; font-weight: 600; border-bottom: 1.2pt solid var(--ink); padding: 3pt 5pt; }
+  td { border-bottom: 0.5pt solid var(--line); padding: 3pt 5pt; vertical-align: top; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.sel td { background: #F6E3E5; font-weight: 600; }
+  tr.base td { color: var(--muted); }
+  figure { margin: 6pt 0 10pt; break-inside: avoid; text-align: center; }
+  figure img { max-width: 100%; }
+  figcaption { font-size: 8.5pt; color: var(--muted); margin-top: 3pt; text-align: left; }
+  .two { display: flex; gap: 10pt; align-items: flex-start; }
+  .two > figure { flex: 1; }
+  code { font-family: 'DejaVu Sans Mono', monospace; font-size: 8.6pt; background: var(--soft); padding: 0 2pt; }
+  .kpis { display: flex; gap: 8pt; margin: 6pt 0 10pt; }
+  .kpi { flex: 1; border: 1pt solid var(--line); border-radius: 4pt; padding: 6pt 8pt; }
+  .kpi b { display: block; font-size: 15pt; color: var(--accent); }
+  .kpi span { font-size: 8.3pt; color: var(--muted); }
+  .refs li { font-size: 9pt; }
+  .pb { break-before: page; }
+</style>
+</head>
+<body>
+
+<h1>Dengue Early Warning for Sri Lankan Districts</h1>
+<p class="subtitle">Two-week-ahead prediction of high-transmission dengue weeks with LightGBM, explained with SHAP and LIME</p>
+<div class="meta">
+  <span><b>Student:</b> R.M.K.D. Kumarasiri</span><span><b>Index:</b> 269133N</span>
+  <span><b>Programme:</b> MSc in Artificial Intelligence – Machine Learning assignment</span>
+  <span><b>Code:</b> github.com/Dinushi97/AML_Assignment_269133N_KumarasiriRMKD</span>
+</div>
+
+<div class="abstract"><p><b>Summary.</b> Using 20 years of official weekly dengue notifications for all 26 Sri Lankan health areas (Epidemiology Unit, Ministry of Health), I built a classifier that, at the end of each week, predicts whether a district’s cases two weeks later will exceed that district’s own high-transmission threshold. After finding and fixing three hidden data-quality problems, I engineered 19 leakage-free, scale-free features and compared six tuned models under time-series cross-validation. The selected model, <b>LightGBM</b> (an algorithm not covered in lectures), reaches <b>ROC-AUC 0.877, PR-AUC 0.791 and recall 0.807</b> on an untouched 2024–2026 test period, against PR-AUC 0.592 for a persistence baseline. SHAP and LIME show that the model relies on epidemiologically sensible signals. The model is served through a Streamlit app with per-prediction explanations, and retrained through an Azure ML / GitHub Actions MLOps pipeline.</p></div>
+
+<h2>1. Problem definition and dataset</h2>
+<h3>1.1 Problem and relevance</h3>
+<p>Dengue is endemic in Sri Lanka and causes large, recurring epidemics. The dataset records 174,687 cases in 2017 and 70,918 in 2023. Regional Medical Officers of Health and Public Health Inspectors respond with vector control: fogging, larval-source reduction and community clean-up drives. These need <b>lead time</b> to mobilise staff, insecticide and communities. A district-level early warning that flags an approaching high-transmission week <b>two weeks ahead</b> (one week covers reporting delay, one week covers mobilisation) can help them act before cases peak.</p>
+<h3>1.2 Data source and collection</h3>
+<p>The Epidemiology Unit publishes a <i>Weekly Epidemiological Report</i> (PDF, epid.gov.lk) listing notified dengue cases for each of the 26 RDHS areas (25 districts plus Kalmunai). The open-source <code>denguedatahub</code> package (Dr. T. S. Talagala, University of Sri Jayewardenepura; GPL-3) downloads these reports and extracts the tables. I exported its <code>srilanka_weekly_data</code> object to CSV. The data cover <b>23 Dec 2006 – 17 May 2026: 26,311 rows</b>, with columns <code>year, week, start.date, end.date, district, cases</code>.</p>
+<h3>1.3 Features and target</h3>
+<p>The target <code>high_risk</code> is 1 if the district’s cases in week <i>t</i>+2 exceed its <b>75th percentile of weekly cases over 2012–2021</b>, so each district is judged on its own scale (150 cases is normal for Colombo, 15 is high for Mullaitivu). From the raw counts I engineered 19 features, all known at week <i>t</i> and all expressed as <b>log ratios to the district threshold</b>: current level and lags 1–3; 4/8/12/52-week averages; 1- and 4-week growth; 8-week volatility; last year’s level in the target week; a seasonal norm; sine/cosine of the target week; national growth; the share of districts already above threshold; and the district’s baseline burden.</p>
+<h3>1.4 Exploratory analysis and preprocessing</h3>
+<figure><img src="figures/eda_national_weekly.png" style="width:92%"><figcaption><b>Figure 1.</b> National weekly cases. Epidemic waves in 2017, 2019 and 2023, and a heavily skewed distribution (median 9 cases per district-week, maximum 2,631).</figcaption></figure>
+<p>The EDA showed (i) a hundred-fold difference in level between districts, (ii) monsoon seasonality with peaks in June–July and December–January, (iii) strong autocorrelation (lag-2 above 0.8), and (iv) a positive rate that shifts strongly between years. It also exposed <b>three data-quality problems</b> hidden behind a file with no missing values:</p>
+<ul>
+<li><b>Monaragala 2020: 52 weeks of zeros</b>, between 330 cases in 2019 and 192 in 2021. This is a reporting failure, so it was set to missing, and the 106 district-weeks whose features or target depend on it were excluded.</li>
+<li><b>22 implausible weekly values:</b> single-week drops to 0–7 cases between normal weeks (missed reports), and the week of 30 Mar 2026, when counts were <b>shifted between districts</b> (Colombo 9, Kilinochchi 117). A rule flags values below 10% or above 10× both neighbouring weeks (neighbours ≥ 30), and these are imputed by within-district interpolation.</li>
+<li><b>One missing week</b> (Puttalam), linearly interpolated within the district.</li>
+</ul>
+<p>Real epidemic peaks were kept as genuine signal. Skew was handled with a <code>log1p</code> transform and threshold-relative features. Tree models need no scaling; logistic regression used a <code>StandardScaler</code> inside its pipeline. There are no categorical inputs to encode, because the district is represented by its baseline burden.</p>
+<p><b>Ethical data use.</b> The data are aggregate public counts per health area, with no names, addresses, ages or other personal data. No individual can be identified, and no consent issue arises.</p>
+
+<h2>2. Selection of a new algorithm: LightGBM</h2>
+<p><b>LightGBM</b> (Ke et al., 2017) is a gradient-boosted decision-tree method. It adds small trees <i>sequentially</i>, each fitted to the gradient of the loss of the current ensemble, and sums them to produce a probability. Its distinctive ideas are <b>histogram-based splitting</b> (features binned into ≤ 255 buckets, which makes training fast), <b>leaf-wise (best-first) tree growth</b> instead of level-wise growth, and optional sampling and feature bundling (GOSS, EFB) for large data.</p>
+<table>
+<tr><th style="width:22%">Property</th><th>Decision tree</th><th>Logistic regression</th><th>k-NN</th><th>Random Forest</th><th>LightGBM</th></tr>
+<tr><td>Model form</td><td>one tree</td><td>linear in features</td><td>stored examples</td><td>deep trees, averaged</td><td>small trees, added sequentially</td></tr>
+<tr><td>Non-linear thresholds</td><td>yes</td><td>no</td><td>yes</td><td>yes</td><td>yes</td></tr>
+<tr><td>Feature interactions</td><td>yes</td><td>no</td><td>implicit</td><td>yes</td><td>yes, controlled by tree size</td></tr>
+<tr><td>Needs scaling</td><td>no</td><td>yes</td><td>yes</td><td>no</td><td>no</td></tr>
+<tr><td>Overfitting risk</td><td>high</td><td>low</td><td>depends on k</td><td>low</td><td>low with shrinkage and leaf limits</td></tr>
+<tr><td>Class imbalance</td><td>weights</td><td>weights</td><td>poor</td><td>weights</td><td>tunable <code>scale_pos_weight</code></td></tr>
+</table>
+<p><b>Why it was selected.</b> The problem has threshold-like effects (risk jumps once a district nears its threshold), interactions between level, season and the national wave, strongly collinear lag features, and a positive rate that moves between 7% and 82% across years. LightGBM handles all of these without scaling, is fast enough for Bayesian tuning under time-series cross-validation (30 trials × 5 folds in under 2 minutes), supports exact TreeSHAP explanations, and achieved the best cross-validated PR-AUC. It was compared against Random Forest, XGBoost, CatBoost, logistic regression and a time-series stacking ensemble.</p>
+
+<h2>3. Model training and evaluation</h2>
+<h3>3.1 Split and validation design</h3>
+<p>Because this is a time series, the split is <b>chronological and purged</b>: train 2007–2021 (18,850 rows), validation 2022–2023 (2,678), and <b>test January 2024 – May 2026 (3,145)</b>, which was never used for any decision. Rows whose <i>t</i>+2 target crosses a boundary were removed. One additional data point (the latest Colombo week with a known outcome) was held out completely for the inference demonstration. Hyperparameters were tuned with <b>Optuna (TPE)</b> by maximising the mean PR-AUC over five expanding-window folds (validation years 2019–2023). The decision threshold was chosen to maximise F1 on the out-of-fold predictions.</p>
+<h3>3.2 Hyperparameters</h3>
+<table>
+<tr><th>Model</th><th class="n">Default CV PR-AUC</th><th class="n">Tuned CV PR-AUC</th><th>Key tuned settings</th></tr>
+<tr><td>LightGBM</td><td class="n">0.777</td><td class="n">0.787</td><td>num_leaves 4, min_child_samples 206, learning_rate 0.010, 500 trees, colsample 0.53, scale_pos_weight 2.8</td></tr>
+<tr><td>XGBoost</td><td class="n">0.754</td><td class="n">0.786</td><td>max_depth 4, learning_rate 0.013, 400 trees, subsample 0.68, gamma 0.83, scale_pos_weight 1.6</td></tr>
+<tr><td>Random Forest</td><td class="n">0.772</td><td class="n">0.785</td><td>400 trees, max_depth 6, min_samples_leaf 13, max_features 0.5, max_samples 0.67</td></tr>
+<tr><td>CatBoost</td><td class="n">0.776</td><td class="n">0.785</td><td>depth 6, 600 iterations, learning_rate 0.024, l2_leaf_reg 5.5, balanced class weights</td></tr>
+<tr><td>Logistic regression</td><td class="n">0.778</td><td class="n">0.779</td><td>C 0.22, L2 penalty, standardised inputs</td></tr>
+</table>
+<p>Tuning improved every model. For LightGBM, it chose <b>many tiny, heavily shrunk trees</b>: a low-variance configuration that generalises across epidemic and non-epidemic years.</p>
+<h3>3.3 Metrics and results</h3>
+<p>Accuracy is misleading with imbalanced, shifting classes, so the main metric is <b>PR-AUC</b> (average precision for the high-risk class). ROC-AUC, F1, precision, recall, balanced accuracy and week-block bootstrap 95% confidence intervals are also reported.</p>
+<table>
+<tr><th>Test set (Jan 2024 – May 2026)</th><th class="n">ROC-AUC</th><th class="n">PR-AUC</th><th class="n">F1</th><th class="n">Precision</th><th class="n">Recall</th><th class="n">Bal. acc.</th></tr>
+<tr class="sel"><td>LightGBM (selected)</td><td class="n">0.877</td><td class="n">0.791</td><td class="n">0.724</td><td class="n">0.656</td><td class="n">0.807</td><td class="n">0.792</td></tr>
+<tr><td>Stacking (RF+XGB+LGBM+Cat → LR)</td><td class="n">0.888</td><td class="n">0.816</td><td class="n">0.743</td><td class="n">0.660</td><td class="n">0.850</td><td class="n">0.810</td></tr>
+<tr><td>CatBoost</td><td class="n">0.887</td><td class="n">0.813</td><td class="n">0.737</td><td class="n">0.696</td><td class="n">0.783</td><td class="n">0.802</td></tr>
+<tr><td>Random Forest</td><td class="n">0.882</td><td class="n">0.805</td><td class="n">0.731</td><td class="n">0.655</td><td class="n">0.826</td><td class="n">0.799</td></tr>
+<tr><td>XGBoost</td><td class="n">0.882</td><td class="n">0.803</td><td class="n">0.735</td><td class="n">0.667</td><td class="n">0.817</td><td class="n">0.802</td></tr>
+<tr><td>Logistic regression</td><td class="n">0.875</td><td class="n">0.787</td><td class="n">0.705</td><td class="n">0.693</td><td class="n">0.718</td><td class="n">0.775</td></tr>
+<tr class="base"><td>Persistence baseline (next = now)</td><td class="n">0.772</td><td class="n">0.592</td><td class="n">0.700</td><td class="n">0.695</td><td class="n">0.706</td><td class="n">0.772</td></tr>
+<tr class="base"><td>Seasonal naive (same week last year)</td><td class="n">0.585</td><td class="n">0.394</td><td class="n">0.472</td><td class="n">0.442</td><td class="n">0.506</td><td class="n">0.585</td></tr>
+</table>
+<div class="kpis">
+<div class="kpi"><b>874</b><span>high weeks caught (true positives)</span></div>
+<div class="kpi"><b>209</b><span>high weeks missed</span></div>
+<div class="kpi"><b>459</b><span>false alarms</span></div>
+<div class="kpi"><b>1,603</b><span>normal weeks correct</span></div>
+</div>
+<figure><img src="figures/test_roc_pr.png" style="width:96%"><figcaption><b>Figure 2.</b> ROC and precision–recall curves on the test set. All tuned models clearly dominate the persistence baseline (×).</figcaption></figure>
+<p><b>What the results indicate.</b> Every tuned model beats the naive baselines by a wide margin. LightGBM’s PR-AUC interval (0.753–0.827) doesn’t overlap the persistence interval (0.547–0.635), and it raises recall from 71% to 81%, so roughly one in three outbreak weeks missed by "next week is like this week" is now caught two weeks ahead. The tree models are statistically indistinguishable on test: their intervals overlap. <b>Model selection followed a rule fixed before testing</b> (best CV PR-AUC; prefer a single model unless stacking gains at least 0.005). This chose LightGBM. CatBoost and the stack are slightly ahead on test, but switching now would mean selecting on the test set. Probabilities are inflated by <code>scale_pos_weight</code>, so they are used as risk scores with a CV-chosen threshold of 0.59. The held-out Colombo week (27 Apr 2026; 300 cases) was predicted HIGH (P = 0.63). Two weeks later Colombo reported 308 cases against a threshold of 291, so the prediction was correct.</p>
+<figure><img src="figures/test_timelines.png" style="width:88%"><figcaption><b>Figure 3.</b> Predicted risk (line, made two weeks earlier) against actual cases in the target week (bars; red = above threshold) for three districts in the test period.</figcaption></figure>
+
+<h2>4. Explainability and interpretation</h2>
+<div class="two">
+<figure><img src="figures/shap_beeswarm.png"><figcaption><b>Figure 4.</b> SHAP summary (TreeSHAP, 1,500 test rows).</figcaption></figure>
+<figure><img src="figures/lime_holdout.png"><figcaption><b>Figure 5.</b> LIME explanation for the held-out Colombo week.</figcaption></figure>
+</div>
+<p><b>What the model has learned.</b> SHAP shows that the forecast is driven mainly by <b>this week’s level</b> (mean |SHAP| 0.65) and the <b>4-week average</b> (0.58) relative to the district threshold, followed by the <b>share of districts already high</b> (0.32), <b>last week’s level</b> (0.29), <b>national 4-week growth</b> (0.11) and the <b>seasonal norm</b> (0.10). Dependence plots show an <b>S-shaped response</b>: below about 40% of the threshold, the effect is a flat −0.5 log-odds. It rises steeply around the threshold and saturates above it, so the forecast is decided in the zone just below the threshold. District size and last year’s level add almost nothing once counts are scaled.</p>
+<p><b>LIME</b> was applied to the held-out point, a correctly forecast onset (Nuwara Eliya, June 2025) and a missed outbreak (Monaragala, March 2024, a borderline 12 vs 11 cases during a falling national trend). On the held-out point, LIME agrees with SHAP in sign on 8 of its top 10 features, and the same four core features appear across five random seeds, so the local explanations are stable.</p>
+<p><b>Alignment with domain knowledge.</b> These patterns match dengue epidemiology: transmission is persistent over weeks (vector and virus cycles), epidemics are nationwide and driven by circulating serotypes, and risk peaks after the south-west and north-east monsoons. The model reasons the way a surveillance epidemiologist would, which supports trust and makes its errors interpretable.</p>
+
+<h2>5. Critical discussion</h2>
+<p><b>Limitations.</b> There are no rainfall or temperature inputs (no open district-weekly series was available), so seasonality and national momentum stand in for weather. The 75th-percentile threshold is one of several reasonable definitions of “high transmission”. Probabilities are not calibrated. Much of the signal is short-term persistence, so outbreaks with no early signal in the counts cannot be foreseen.</p>
+<p><b>Data quality.</b> The labels are <i>reported</i> cases, affected by testing, hospital access, reporting delays and disruptions such as COVID-19 in 2020–21. The three detected problems show that undetected errors may remain.</p>
+<p><b>Bias and fairness.</b> Performance is uneven. F1 is 0.90 in Gampaha and 0.83 in Galle, but 0.22–0.48 in Vavuniya, Kurunegala, Mullaitivu and Kilinochchi, where high weeks are rare. Used naively, the system would give weaker warnings to several Northern and North-Western areas that already have fewer health resources. Districts with better laboratory access also report a larger share of true infections. Mitigations: per-district thresholds (used), transparent per-district evaluation, district-specific alert thresholds, and human review of every alert.</p>
+<p><b>Real-world impact and ethics.</b> Two weeks of warning can bring vector control forward and reduce illness and hospital load. Errors have costs: 459 false alarms on the test period mean wasted insecticide, staff time and public trust (and more insecticide exposure), while 209 missed weeks mean late responses. The threshold deliberately favours recall. The tool must remain <b>decision support</b>, with explanations shown for every prediction to limit automation bias, and would need validation with the Epidemiology Unit before any operational use. Only aggregate public data are used.</p>
+
+<h2>6. Front-end integration and MLOps (bonus)</h2>
+<p>The trained model is saved with <code>joblib</code> and served by a <b>Streamlit</b> app with four views: a national risk overview for any week; a district forecast where users <b>enter or edit recent weekly counts</b> and see the predicted risk with a <b>per-prediction SHAP explanation</b>; a held-out-point check; and model performance.</p>
+<p><b>MLOps on Azure.</b> GitHub Actions runs tests on every push. It then registers the data as a versioned Azure ML data asset, runs the training job on an auto-scaling Azure ML cluster (tracked with MLflow), and registers the model only if it beats the persistence baseline (a quality gate). Finally, it redeploys the app on Azure App Service. A weekly schedule repeats this with new data (continuous training). Authentication uses OIDC with a managed identity.</p>
+<figure><img src="app_screenshots/2_district_forecast.png" style="width:72%"><figcaption><b>Figure 6.</b> Streamlit app: district forecast with editable recent counts (what-if) and a SHAP explanation.</figcaption></figure>
+
+<h2>7. Conclusion</h2>
+<p>A local, real and newly framed problem (district-level dengue early warning) was solved with a carefully validated pipeline: data-quality repair, leakage-free features, time-series tuning, honest model selection, and two complementary explanation methods. LightGBM catches about four in five high-transmission weeks two weeks ahead, explains every prediction, and is available through a working app with an automated cloud pipeline. Adding district rainfall data and calibrated probabilities are the next steps.</p>
+
+<h2>References</h2>
+<ol class="refs">
+<li>Epidemiology Unit, Ministry of Health Sri Lanka. <i>Weekly Epidemiological Report</i>. https://www.epid.gov.lk</li>
+<li>Talagala, T. S. <i>denguedatahub: A Tidy Format Datasets of Dengue by Country</i>. R package, GPL-3. https://github.com/thiyangt/denguedatahub</li>
+<li>Ke, G. et al. (2017). LightGBM: A Highly Efficient Gradient Boosting Decision Tree. <i>NeurIPS 30</i>.</li>
+<li>Lundberg, S. M. &amp; Lee, S.-I. (2017). A Unified Approach to Interpreting Model Predictions. <i>NeurIPS 30</i>.</li>
+<li>Ribeiro, M. T., Singh, S. &amp; Guestrin, C. (2016). “Why Should I Trust You?”: Explaining the Predictions of Any Classifier. <i>KDD</i>.</li>
+<li>Akiba, T. et al. (2019). Optuna: A Next-generation Hyperparameter Optimization Framework. <i>KDD</i>.</li>
+</ol>
+</body>
+</html>

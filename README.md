@@ -3,7 +3,9 @@
 A machine-learning early-warning model. **At the end of each report week it predicts whether a district will have a high-transmission dengue week two weeks later.**
 It covers all 26 RDHS areas, uses 20 years of official Sri Lankan surveillance data, compares tuned tree ensembles, explains its predictions with SHAP and LIME, and is served through a Streamlit app.
 
-> Applied Machine Learning – final assignment
+> MSc in AI · Machine Learning assignment · R.M.K.D. Kumarasiri (269133N)
+>
+> **Submission files:** report [`reports/Report_269133N_KumarasiriRMKD.pdf`](reports/Report_269133N_KumarasiriRMKD.pdf) · notebook [`notebooks/dengue_early_warning.ipynb`](notebooks/dengue_early_warning.ipynb) · demo video script [`docs/demo_video_script.md`](docs/demo_video_script.md) · Azure MLOps guide [`docs/azure-mlops-guide.md`](docs/azure-mlops-guide.md)
 
 ## Results at a glance
 
@@ -33,7 +35,7 @@ Test set: **January 2024 – May 2026**, 3,145 district-weeks that were never us
 
 ## Problem
 
-Dengue is endemic in Sri Lanka. More than 186,000 cases were reported in 2017 and more than 89,000 in 2023.
+Dengue is endemic in Sri Lanka. In this dataset, 174,687 cases were reported in 2017 (the worst epidemic year) and 70,918 in 2023.
 MOH offices and PHIs respond to rising cases with vector control (fogging, larval source reduction and clean-up drives), and these campaigns need **lead time**.
 This project gives each district a **probability of a high-transmission week two weeks ahead**. One week covers the reporting delay and one week covers mobilisation.
 
@@ -168,4 +170,5 @@ flowchart LR
 * **No weather inputs.** District rainfall and temperature are known dengue drivers. They weren't available as an open district-weekly series, so seasonality and national momentum stand in for them. Adding Department of Meteorology rainfall is the clearest next step.
 * **Reported cases, not infections.** Changes in testing and reporting (COVID-19 in 2020–21, the Monaragala 2020 gap) affect the labels.
 * **Thresholds are fixed** at the 2012–2021 75th percentile. If the baseline keeps rising, they should be re-estimated periodically, which the weekly Azure retraining makes easy.
-* For research and education only. This is not an official alert system.
+* **Uneven performance:** F1 0.90 in Gampaha but 0.22–0.48 in Vavuniya, Kurunegala, Mullaitivu and Kilinochchi, where high weeks are rare. Used naively, it would give weaker warnings to areas with fewer resources. District-specific alert thresholds and human review are recommended.
+* **Ethics:** aggregate public data only, with no personal information. This is decision support with a human in the loop. It's for research and education, not an official alert system.
