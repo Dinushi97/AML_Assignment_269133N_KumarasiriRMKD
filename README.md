@@ -112,7 +112,7 @@ Docker: `docker build -t dengue-ew . && docker run -p 8501:8501 dengue-ew`
 
 ## MLOps on Azure (bonus)
 
-**Setup guide:** [`docs/azure-mlops-guide.md`](docs/azure-mlops-guide.md) · **Live app:** `https://<your-webapp>.azurewebsites.net`
+**Setup guide:** [`docs/azure-mlops-guide.md`](docs/azure-mlops-guide.md) · **Live app:** https://dengue-ews-kumarasiri.azurewebsites.net
 
 ```mermaid
 flowchart LR
@@ -161,7 +161,7 @@ flowchart LR
 | 17 | Use AI coding assistants | Permitted | ✅ | Used to help write code and the app (declare as your module requires) |
 | 18 | Understand and justify your own ML work | Required | ✅ | Every design decision is justified in the notebook: target, leakage control, metrics, tuning spaces, selection rule, limitations |
 | 19 | Implement MLOps | Optional (bonus) | ✅ | Azure ML: versioned data asset and environment, cloud training job, MLflow tracking, quality gate, model registry. GitHub Actions CI/CD with OIDC (Azure runs on demand only, to protect the student credit); app auto-deployed to Azure App Service ([guide](docs/azure-mlops-guide.md)) |
-| 20 | GitHub repository + deployment | Bonus | ⏳ | Repo-ready with workflows. Follow the [guide](docs/azure-mlops-guide.md) to push to GitHub and deploy on Azure, then add the live URL above |
+| 20 | GitHub repository + deployment | Bonus | ✅ | Code on GitHub with CI. The Azure MLOps pipeline trained the EBM in Azure ML, registered it in the model registry and deployed the app to Azure App Service: https://dengue-ews-kumarasiri.azurewebsites.net |
 | 21 | Avoid deep learning, CV and RL | Restriction | ✅ | No deep learning: EBM is a boosted additive model. Comparisons are classical ML only |
 | 22 | Use a new problem | Required | ✅ | Dengue outbreak early warning, not the commonly used car or house price datasets |
 | 23 | Use an algorithm not taught in lectures | Required | ✅ | Explainable Boosting Machine. Lecture models (LR, DT, k-NN, RF, XGBoost) appear only as comparisons |
