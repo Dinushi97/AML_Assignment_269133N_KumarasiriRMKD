@@ -692,10 +692,11 @@ if pairs:
     t = pairs[0]; d = glob.data(term_names.index(t))
     fig, ax = plt.subplots(figsize=(7, 5))
     sc = np.asarray(d["scores"], dtype=float)
+    xe, ye = np.asarray(d["left_names"], dtype=float), np.asarray(d["right_names"], dtype=float)
     lim = np.abs(sc).max()
-    im = ax.imshow(sc.T, origin="lower", aspect="auto", cmap="RdBu_r", vmin=-lim, vmax=lim)
+    im = ax.pcolormesh(xe, ye, sc.T, cmap="RdBu_r", vmin=-lim, vmax=lim, shading="flat")
     a, b = t.split(" & ")
-    ax.set_xlabel(f"{a} (bin)"); ax.set_ylabel(f"{b} (bin)"); ax.set_title(f"EBM interaction: {t}")
+    ax.set_xlabel(a); ax.set_ylabel(b); ax.set_title(f"EBM interaction: {t}")
     plt.colorbar(im, label="contribution to log-odds"); savefig("ebm_interaction"); plt.show()
 
 # %%
