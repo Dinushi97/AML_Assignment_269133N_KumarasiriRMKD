@@ -128,7 +128,7 @@ flowchart LR
 |---|---|
 | Source control + CI | GitHub. `ci.yml` runs `pytest` (no future leakage, purged split, data validation, app reproduces training features) on every push and PR |
 | Data versioning | `azure/data-asset.yml`: Azure ML data asset `dengue-weekly`, version = SHA-256 of the file |
-| Reproducible environment | `azure/environment.yml` + `azure/conda.yml`: pinned Python 3.12 environment, versioned by hash |
+| Reproducible environment | `azure/environment.yml` + `azure/job-requirements.txt`: public Python 3.12 image plus pinned packages, versioned by hash |
 | Cloud training | `azure/train-job.yml`: Azure ML command job on `cpu-cluster` (scales to zero) running `src/train.py` |
 | Experiment tracking | MLflow in the Azure ML workspace: parameters, test metrics, baseline metrics, data report, model file |
 | Quality gate | The job fails, and nothing is registered or deployed, unless the model beats the persistence baseline on PR-AUC and F1 |

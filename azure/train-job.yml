@@ -4,6 +4,7 @@ experiment_name: dengue-early-warning
 description: Validate data -> features -> train the Explainable Boosting Machine (EBM) with tuned params -> evaluate vs persistence -> quality gate
 code: ..
 command: >-
+  pip install --quiet --no-cache-dir -r azure/job-requirements.txt &&
   python -m src.train
   --data ${{inputs.raw_data}}
   --out ${{outputs.model_dir}}/dengue_model.pkl

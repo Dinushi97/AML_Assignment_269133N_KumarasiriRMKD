@@ -1,5 +1,4 @@
 $schema: https://azuremlschemas.azureedge.net/latest/environment.schema.json
 name: dengue-train-env
-description: Python 3.12 + scikit-learn + interpret (EBM) + MLflow for the dengue early-warning model
-image: mcr.microsoft.com/azureml/openmpi5.0-ubuntu24.04:latest
-conda_file: conda.yml
+description: Public Python 3.12 image (no image build, so no container registry needed). Pinned packages from azure/job-requirements.txt are installed when the job starts.
+image: python:3.12-slim

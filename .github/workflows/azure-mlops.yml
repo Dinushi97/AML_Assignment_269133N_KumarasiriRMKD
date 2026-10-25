@@ -78,7 +78,7 @@ jobs:
 
       - name: Register environment (version = hash of its definition)
         run: |
-          V=$(cat azure/environment.yml azure/conda.yml | sha256sum | cut -c1-10)
+          V=$(cat azure/environment.yml azure/job-requirements.txt | sha256sum | cut -c1-10)
           az ml environment show --name dengue-train-env --version "$V" >/dev/null 2>&1 \
             || az ml environment create --file azure/environment.yml --version "$V"
 
