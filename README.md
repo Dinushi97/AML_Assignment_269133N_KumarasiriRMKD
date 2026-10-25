@@ -33,6 +33,10 @@ Test set: **January 2024 – May 2026**, 3,145 district-weeks that were never us
 <img src="reports/app_screenshots/2_district_forecast.png" width="49%">
 </p>
 
+**Can the EBM be pushed higher?** After tuning, seven further EBM variants were tried and scored by cross-validation only, so the test set was not used to choose them (`python -m scripts.ebm_cv_experiments`, results in `reports/ebm_cv_ablation.csv`).
+Mean CV PR-AUC: tuned EBM 0.787; 10 interactions 0.788; 20 interactions 0.787; slower learning rate 0.787; recency weighting 0.782–0.784; monotone constraints 0.784; finer bins 0.782.
+None changed the score by more than ±0.005, which is within fold-to-fold noise, so the tuned model was kept. Choosing a variant from the test results instead would leak the test set into model selection.
+
 
 ## Problem
 

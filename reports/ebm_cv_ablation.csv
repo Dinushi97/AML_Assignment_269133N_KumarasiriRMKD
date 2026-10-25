@@ -1,0 +1,9 @@
+variant,cv_pr_auc_mean_2019_2023
+current,0.7874
+recency hl=4y,0.7823
+recency hl=8y,0.7839
+monotone level,0.7837
+interactions=10,0.7884
+interactions=20,0.7866
+max_bins=128,0.7818
+lr=0.02 + more rounds,0.7867
