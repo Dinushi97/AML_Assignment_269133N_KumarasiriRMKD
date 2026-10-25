@@ -89,11 +89,16 @@ jobs:
                   --set tags.git_sha=${{ github.sha }} --query name -o tsv)
           echo "job_name=$JOB" >> "$GITHUB_OUTPUT"
           echo "Azure ML job: $JOB"
-          az ml job stream --name "$JOB" || true
+          az ml job stream --name "$JOB" 2>&1 | tee stream.log || true
           STATUS=$(az ml job show --name "$JOB" --query status -o tsv)
           echo "status: $STATUS"
           # the job fails (exit 1) when the model does not beat the persistence baseline
-          [ "$STATUS" = "Completed" ] || { echo "::error::Training job $STATUS (quality gate failed or error)"; exit 1; }
+          if [ "$STATUS" != "Completed" ]; then
+            ERR=$(az ml job show --name "$JOB" --query "error.message" -o tsv 2>/dev/null | head -c 2500 | tr '\n' ' ')
+            echo "::error title=Azure ML job $STATUS::${ERR:-no error message}"
+            echo "::error title=Job log tail::$(tail -c 2500 stream.log | tr '\n' ' ')"
+            exit 1
+          fi
 
       - name: Register model in the Azure ML model registry
         run: |
