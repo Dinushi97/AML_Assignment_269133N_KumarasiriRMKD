@@ -7,6 +7,7 @@
 # Safe to re-run: anything that already exists is reused.
 # Override any default like this:  LOC=centralindia WEBAPP=my-unique-name bash scripts/setup_azure.sh
 set -euo pipefail
+export PYTHONWARNINGS=ignore   # hide harmless SyntaxWarnings from the Azure CLI
 
 GH_REPO="${GH_REPO:-Dinushi97/AML_Assignment_269133N_KumarasiriRMKD}"
 RG="${RG:-rg-dengue-mlops}"
@@ -29,8 +30,21 @@ echo "Signed in as $(az account show --query user.name -o tsv) | subscription: $
 az extension add --name ml --yes --only-show-errors >/dev/null
 
 step "Registering resource providers (first time can take a few minutes)"
-for p in MachineLearningServices Storage KeyVault Insights ContainerRegistry Web ManagedIdentity OperationalInsights; do
-  az provider register --namespace "Microsoft.$p" --wait --only-show-errors
+PROVIDERS="MachineLearningServices Storage KeyVault Insights ContainerRegistry Web ManagedIdentity OperationalInsights"
+for p in $PROVIDERS; do      # start all registrations; retry if the connection drops
+  for _ in 1 2 3 4 5; do
+    az provider register --namespace "Microsoft.$p" --only-show-errors >/dev/null 2>&1 && break
+    echo "  network hiccup registering Microsoft.$p – retrying…"; sleep 10
+  done
+done
+for _ in $(seq 1 60); do     # then wait (up to ~15 min) until all are Registered
+  pending=""
+  for p in $PROVIDERS; do
+    state=$(az provider show --namespace "Microsoft.$p" --query registrationState -o tsv 2>/dev/null || echo "Unknown")
+    [ "$state" = "Registered" ] || pending="$pending $p"
+  done
+  [ -z "$pending" ] && { echo "  all providers registered"; break; }
+  echo "  still registering:$pending"; sleep 15
 done
 
 step "Resource group $RG ($LOC)"
