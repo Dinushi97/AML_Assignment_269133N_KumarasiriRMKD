@@ -72,21 +72,26 @@ jobs:
       - name: Register data asset (version = content hash)
         run: |
           V=$(sha256sum data/raw/srilanka_weekly_dengue.csv | cut -c1-10)
-          az ml data show --name dengue-weekly --version "$V" >/dev/null 2>&1 \
-            || az ml data create --file azure/data-asset.yml --version "$V"
+          if ! az ml data show --name dengue-weekly --version "$V" >/dev/null 2>&1; then
+            az ml data create --file azure/data-asset.yml --version "$V" > out.log 2>&1 \
+              || { echo "::error title=Data asset registration failed::$(tail -c 2500 out.log | tr '\n' ' ')"; exit 1; }
+          fi
           echo "data version $V"
 
       - name: Register environment (version = hash of its definition)
         run: |
           V=$(cat azure/environment.yml azure/job-requirements.txt | sha256sum | cut -c1-10)
-          az ml environment show --name dengue-train-env --version "$V" >/dev/null 2>&1 \
-            || az ml environment create --file azure/environment.yml --version "$V"
+          if ! az ml environment show --name dengue-train-env --version "$V" >/dev/null 2>&1; then
+            az ml environment create --file azure/environment.yml --version "$V" > out.log 2>&1 \
+              || { echo "::error title=Environment registration failed::$(tail -c 2500 out.log | tr '\n' ' ')"; exit 1; }
+          fi
 
       - name: Submit training job and wait
         id: job
         run: |
           JOB=$(az ml job create --file azure/train-job.yml \
-                  --set tags.git_sha=${{ github.sha }} --query name -o tsv)
+                  --set tags.git_sha=${{ github.sha }} --query name -o tsv 2> err.log) \
+            || { echo "::error title=Job submission failed::$(tail -c 2500 err.log | tr '\n' ' ')"; exit 1; }
           echo "job_name=$JOB" >> "$GITHUB_OUTPUT"
           echo "Azure ML job: $JOB"
           az ml job stream --name "$JOB" 2>&1 | tee stream.log || true

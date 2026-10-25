@@ -1,4 +1,4 @@
 $schema: https://azuremlschemas.azureedge.net/latest/environment.schema.json
 name: dengue-train-env
 description: Public Python 3.12 image (no image build, so no container registry needed). Pinned packages from azure/job-requirements.txt are installed when the job starts.
-image: python:3.12-slim
+image: docker.io/python:3.12-slim
