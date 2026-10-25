@@ -1,0 +1,72 @@
+{
+  "model_name": "Explainable Boosting Machine (EBM)",
+  "features": [
+    "rel_now",
+    "rel_lag1",
+    "rel_lag2",
+    "rel_lag3",
+    "rel_ma4",
+    "rel_ma8",
+    "rel_ma12",
+    "rel_ma52",
+    "growth_1w",
+    "growth_4w",
+    "volatility_8w",
+    "rel_same_week_last_year",
+    "seasonal_norm",
+    "target_week_sin",
+    "target_week_cos",
+    "national_growth_1w",
+    "national_growth_4w",
+    "share_districts_high",
+    "district_baseline"
+  ],
+  "feature_descriptions": {
+    "rel_now": "This week's cases vs district threshold (log ratio)",
+    "rel_lag1": "Cases 1 week ago vs threshold (log ratio)",
+    "rel_lag2": "Cases 2 weeks ago vs threshold (log ratio)",
+    "rel_lag3": "Cases 3 weeks ago vs threshold (log ratio)",
+    "rel_ma4": "4-week average vs threshold (log ratio)",
+    "rel_ma8": "8-week average vs threshold (log ratio)",
+    "rel_ma12": "12-week average vs threshold (log ratio)",
+    "rel_ma52": "52-week average vs threshold (log ratio)",
+    "growth_1w": "Week-on-week growth (log)",
+    "growth_4w": "Growth over 4 weeks (log)",
+    "volatility_8w": "Std. dev. of weekly log cases, last 8 weeks",
+    "rel_same_week_last_year": "Cases in the target week last year vs threshold",
+    "seasonal_norm": "Typical level for the target week (2012-21 median)",
+    "target_week_sin": "Seasonality of target week (sine)",
+    "target_week_cos": "Seasonality of target week (cosine)",
+    "national_growth_1w": "Sri Lanka total cases, 1-week growth (log)",
+    "national_growth_4w": "Sri Lanka total cases, 4-week growth (log)",
+    "share_districts_high": "Share of districts above their threshold this week",
+    "district_baseline": "District's usual burden: log(1 + threshold)"
+  },
+  "decision_threshold": 0.30999999999999994,
+  "horizon_weeks": 2,
+  "reference_years": [
+    2012,
+    2021
+  ],
+  "trained_on": "2007-12-29 to 2023-12-16",
+  "test_metrics": {
+    "roc_auc": 0.8673,
+    "pr_auc": 0.7767,
+    "f1": 0.7147,
+    "precision": 0.6454,
+    "recall": 0.8007,
+    "balanced_accuracy": 0.7847,
+    "brier": 0.1384
+  },
+  "version": "20261025-091018-71ebbc0277",
+  "data_sha256": "71ebbc0277",
+  "best_params": {
+    "learning_rate": 0.0789329635930778,
+    "max_leaves": 4,
+    "min_samples_leaf": 11,
+    "max_bins": 39,
+    "interactions": 3,
+    "smoothing_rounds": 50,
+    "outer_bags": 8
+  }
+}

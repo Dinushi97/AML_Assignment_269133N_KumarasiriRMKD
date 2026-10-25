@@ -42,7 +42,7 @@
     "share_districts_high": "Share of districts above their threshold this week",
     "district_baseline": "District's usual burden: log(1 + threshold)"
   },
-  "decision_threshold": 0.35999999999999993,
+  "decision_threshold": 0.30999999999999994,
   "horizon_weeks": 2,
   "reference_years": [
     2012,
@@ -50,19 +50,19 @@
   ],
   "trained_on": "2007-12-29 to 2023-12-16 (21528 district-weeks)",
   "test_metrics": {
-    "ROC-AUC": 0.8591,
-    "PR-AUC": 0.7669,
-    "F1": 0.7091,
-    "Precision": 0.6524,
-    "Recall": 0.7765,
-    "Bal. acc.": 0.7796,
-    "Brier": 0.1423
+    "ROC-AUC": 0.8673,
+    "PR-AUC": 0.7768,
+    "F1": 0.7145,
+    "Precision": 0.6451,
+    "Recall": 0.8006,
+    "Bal. acc.": 0.7846,
+    "Brier": 0.1383
   },
   "best_params": {
-    "learning_rate": 0.01115579284069578,
+    "learning_rate": 0.0789329635930778,
     "max_leaves": 4,
-    "min_samples_leaf": 33,
-    "max_bins": 167,
+    "min_samples_leaf": 11,
+    "max_bins": 39,
     "interactions": 3,
     "smoothing_rounds": 50,
     "outer_bags": 8

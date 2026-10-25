@@ -648,7 +648,26 @@ fig.suptitle("Two-week-ahead EBM forecasts on the test period", y=1.0); fig.tigh
 
 # %% [markdown]
 # ### 12.1 What the results show
-# *(interpretation written after the results above)*
+#
+# | Test set (Jan 2024 – May 2026) | ROC-AUC | PR-AUC | F1 | Precision | Recall | Bal. acc. |
+# |---|---|---|---|---|---|---|
+# | **EBM (new algorithm)** | **0.867** | **0.777** | **0.715** | 0.645 | **0.801** | **0.785** |
+# | Random Forest (standard) | 0.883 | 0.806 | 0.730 | 0.676 | 0.793 | 0.797 |
+# | k-NN (standard) | 0.881 | 0.805 | 0.730 | 0.631 | 0.864 | 0.800 |
+# | XGBoost (standard) | 0.883 | 0.805 | 0.732 | 0.657 | 0.826 | 0.800 |
+# | Logistic regression (standard) | 0.875 | 0.785 | 0.720 | 0.673 | 0.774 | 0.788 |
+# | Decision tree (standard) | 0.862 | 0.771 | 0.704 | 0.632 | 0.793 | 0.775 |
+# | Persistence baseline | 0.772 | 0.592 | 0.700 | 0.695 | 0.706 | 0.772 |
+# | Seasonal naive | 0.585 | 0.394 | 0.472 | 0.442 | 0.506 | 0.585 |
+#
+# 1. **EBM is a useful early-warning model.** Against the persistence rule ("next is like now"), PR-AUC rises from 0.59 to 0.78, and **recall from 71% to 80%**. That's about one in three outbreak weeks that persistence misses, now caught two weeks ahead. F1 is higher than persistence in 92% of bootstrap resamples.
+# 2. **In cross-validation, EBM matches the black-box models.** Its CV PR-AUC (0.786) is second of six, only 0.001 behind XGBoost (0.787) and ahead of Random Forest (0.785). Tuning gave EBM little extra (+0.002) because its defaults are already strong. Tuning mattered far more for the decision tree (+0.27) and k-NN (+0.12).
+# 3. **On the test period, EBM trails the strongest black boxes by about 0.03 PR-AUC.** Random Forest, XGBoost and k-NN reach about 0.805, against EBM's 0.777. The bootstrap shows this gap is real (Random Forest is ahead in 99% of resamples), although the F1 difference is only 0.015 and the intervals overlap. A likely reason is the regime shift: the test years are much more epidemic than training (34% vs 20% positive). Models that mainly respond to *recent levels* adapted slightly better than EBM's additive curves, which also learned some seasonal and national effects from the past.
+# 4. **This is the accuracy–interpretability trade-off, measured.** For about 3 points of PR-AUC, EBM gives an **exact, complete explanation of every forecast** (§13). Random Forest, XGBoost and k-NN can only be explained approximately, after the fact. EBM also clearly beats the other two *interpretable* standard models: the decision tree (0.771) and, in cross-validation, logistic regression (0.786 vs 0.779).
+# 5. **Errors.** On 3,145 test district-weeks, EBM caught **867** high weeks and missed **216**, raised **477** false alarms, and correctly cleared **1,585** normal weeks. The CV-chosen threshold (0.31) deliberately favours recall.
+# 6. **Hold-out point.** Colombo, week of 27 Apr 2026 (300 cases): P = 0.32, just above the 0.31 threshold, so it's predicted HIGH. Two weeks later Colombo reported 308 cases against a threshold of 291, so the prediction was correct.
+#
+# **Why EBM is kept as the proposed model.** The assignment asks for a *new* algorithm and for its behaviour to be explained. In a public-health setting, an alert that officials can audit term by term is worth a small loss in ranking accuracy. EBM delivers that while staying within cross-validation noise of the best black box and far above the naive baselines. The standard models are reported openly so the cost of this choice is visible.
 
 # %% [markdown]
 # ## 13. Explainability
@@ -804,8 +823,24 @@ display(agree.round(3))
 print(f"Sign agreement on LIME's top-10 features: EBM–SHAP {agree['EBM–SHAP same sign'].mean():.0%}, EBM–LIME {agree['EBM–LIME same sign'].mean():.0%}")
 
 # %% [markdown]
-# ### 13.4 Interpreting the model
-# *(discussion written after the results)*
+# ### 13.4 Interpreting the model (EBM terms, SHAP, LIME)
+#
+# **What the model has learned.** The tuned EBM has **22 terms**: 19 single-feature shape functions plus 3 pairwise interactions.
+# 1. **Recent level relative to the district's normal is the main driver.** `rel_ma4` (importance 0.81) and `rel_now` (0.51) have **monotone, S-like shape functions**. Below about 15% of threshold (log ratio below −2), the contribution is strongly negative. It rises steeply around the threshold (0 on the log scale) and reaches +1 to +2 log-odds above it. `rel_lag1` (0.40) adds short-term momentum.
+# 2. **The national wave matters.** `share_districts_high` (0.44) rises almost steadily: when more than 80% of districts are already high, every district gets about +1.4 log-odds. `national_growth_4w` (0.30) adds national momentum.
+# 3. **Season:** `target_week_sin` and `target_week_cos` and the `seasonal_norm` encode the post-monsoon peaks.
+# 4. **Interactions found automatically:**
+#    * `rel_now × district_baseline` (0.30): being above threshold is a **stronger** signal in high-burden districts (Colombo, Gampaha), where high counts persist. In small districts, a single high week is more often noise. This is the heat map in §13.1.
+#    * `target_week_cos × national_growth_4w` and `target_week_sin × share_districts_high`: national growth means more just before the seasonal peaks than outside them.
+#
+# **The three explanation methods agree.** Feature rankings from EBM's own importance and from SHAP correlate at **Spearman 0.97**. On the hold-out point, SHAP has the same sign as EBM's exact contributions on **all 10** of LIME's top features, and LIME agrees on 9 of 10. LIME's top-5 set always contains the same four core features (`rel_ma4`, `rel_now`, `rel_lag1`, `share_districts_high`) across five random seeds.
+#
+# **Local explanations.**
+# * **Hold-out point (Colombo, 27 Apr 2026).** Baseline −2.54 log-odds, plus contributions: 4-week average at threshold +0.71, rising national trend +0.58, this week at threshold +0.46, last week +0.22, the Colombo-specific interaction +0.18, the national share +0.17; minus late-May seasonality −0.26 and a falling 4-week district trend −0.10. That sums to −0.75 log-odds, P = 0.32, just over the alert threshold. The actual count was 308 cases (HIGH) ✔. Because EBM is additive, these numbers are **exactly** the model's computation, not an approximation.
+# * **Correctly forecast onset (Hambantota, June 2025):** the district was still below threshold, but the recent average, the national share and the season pushed P to 0.95. Two weeks later it had 24 cases against a threshold of 22.
+# * **Missed outbreak (Monaragala, May 2024, P = 0.20):** recent counts were well below threshold during a calm national period. The district then jumped to 20 cases (threshold 11). Outbreaks without any early signal in the counts are this model's main blind spot.
+#
+# **Alignment with domain knowledge.** These patterns match dengue epidemiology. Transmission persists over weeks (mosquito and virus cycles), so recent level dominates. Epidemics are nationwide, driven by circulating serotypes. Risk peaks after the south-west (May–September) and north-east (December–February) monsoons. And the stronger persistence in dense urban districts is consistent with Colombo and Gampaha's year-round transmission. The model reasons the way a surveillance epidemiologist would, and because it's a glass box, any part of that reasoning can be checked and challenged.
 
 # %% [markdown]
 # ## 14. Save the model and run inference on the held-out data point
@@ -845,14 +880,16 @@ print(f"Actual outcome     : {int(r['target_cases'])} cases -> {'HIGH RISK' if r
 # %% [markdown]
 # ## 15. Conclusions
 #
-# **Summary.** Using 20 years of official Sri Lankan dengue surveillance data, I built a two-week-ahead early-warning classifier for all 26 RDHS areas.
-# After a careful EDA, three kinds of data problem were found and handled (a missing week, a year of zeros recorded instead of missing values for Monaragala, and 22 implausible or misaligned weekly values).
-# Nineteen leakage-free, scale-free features were engineered. Six model families were tuned with Optuna under expanding-window time-series cross-validation. The selected **LightGBM** model reaches **ROC-AUC 0.88, PR-AUC 0.79, recall 0.81** on 2½ years of unseen test data. It beats the persistence baseline by a statistically clear margin and provides explanations through SHAP and LIME that agree with each other.
+# **Summary.** Using 20 years of official Sri Lankan dengue surveillance data, I built a two-week-ahead early-warning classifier for all 26 RDHS areas, using a **new algorithm, the Explainable Boosting Machine (EBM)**.
+# After a careful EDA, three kinds of data problem were found and handled (a missing week, a year of zeros for Monaragala, and 22 implausible or misaligned weekly values). Nineteen leakage-free, scale-free features were engineered.
+# EBM was tuned with Optuna under expanding-window time-series cross-validation and compared with five standard models. It reaches **ROC-AUC 0.87, PR-AUC 0.78 and recall 0.80** on 2½ years of unseen data, far above the persistence baseline (PR-AUC 0.59). It matches the best black-box model in cross-validation and trails it by about 0.03 PR-AUC on the test period. In return, every prediction comes with an **exact explanation**, confirmed by SHAP and LIME.
 #
-# **Requirement → where it's met**
-# * Problem, local data and ethics: §1–2 · EDA: §5 · Preprocessing (imputation, outliers, transformation, scaling, split): §6
-# * RF, XGBoost, LightGBM, CatBoost, LR and stacking: §8–10 · New algorithm (LightGBM) and how it differs: §11.2 · Tuning: §9 · Evaluation and justification: §11
-# * SHAP and LIME: §12 · Critical discussion (limitations, data quality, bias, ethics): §15 · Saved model and hold-out inference: §13 · App: `app/app.py` · MLOps: `src/train.py`, `tests/`, `.github/workflows/`
+# **Guideline → where it's met**
+# * §1 Problem, data source, features, size, preprocessing, ethics: notebook §1–2, §4–6
+# * §2 New algorithm (EBM), why it was chosen, and how it differs from standard models: §8
+# * §3 Split, hyperparameters, metrics, results with tables and plots: §6.5, §9–12
+# * §4 Explainability (EBM terms, shape functions as partial dependence, interactions, SHAP, LIME) and interpretation: §13
+# * §5 Critical discussion: §16 · Saved model and hold-out inference: §14 · Front-end: `app/app.py` · MLOps: `src/train.py`, `azure/`, `.github/workflows/`
 
 # %% [markdown]
 # ## 16. Critical discussion
@@ -860,8 +897,9 @@ print(f"Actual outcome     : {int(r['target_cases'])} cases -> {'HIGH RISK' if r
 # **Limitations of the model**
 # * **No weather inputs.** District rainfall and temperature are known dengue drivers with a 2–8 week lag. They weren't available as an open district-weekly series, so seasonality and national momentum stand in for them.
 # * **Fixed thresholds.** The 75th percentile for 2012–2021 is one reasonable definition of "high transmission". Others (an epidemic channel, or mean + 2 SD) would change the task. The test-period positive rate (34%) is higher than in training (20%), reflecting the post-2017 rise in dengue.
-# * **Probabilities aren't calibrated** (§11.1). Treat them as risk scores.
-# * **Short-term persistence carries much of the signal.** The model adds clear value over persistence (recall +10 points), but it can't foresee outbreaks that have no early signal in the counts.
+# * **Accuracy cost of interpretability.** On the test period EBM is about 0.03 PR-AUC behind Random Forest, XGBoost and k-NN (§12.1). The project accepts this for transparency, but it's a real cost.
+# * **Calibration.** Probabilities are used with a CV-chosen threshold (0.31), so treat them as risk scores. EBM's Brier score (0.138) is close to the other models'.
+# * **Short-term persistence carries much of the signal.** EBM adds clear value over persistence (recall +9 points), but it can't foresee outbreaks with no early signal in the counts (e.g. Monaragala, May 2024).
 #
 # **Data quality issues**
 # * **A whole year recorded as zeros** (Monaragala 2020), **22 implausible or misaligned weekly values** (including the week of 30 March 2026, when counts were shifted between districts), and one missing week. These were found during EDA and handled in §6.
@@ -869,14 +907,14 @@ print(f"Actual outcome     : {int(r['target_cases'])} cases -> {'HIGH RISK' if r
 # * **Reporting delay.** Weekly reports can be revised later. The model uses the counts as published in the package.
 #
 # **Risks of bias or unfairness**
-# * **Uneven performance between districts.** F1 is high in high-burden districts (Gampaha 0.90, Monaragala 0.88, Galle 0.83) but low where high weeks are rare (Vavuniya 0.22, Kurunegala 0.44, Mullaitivu 0.46, Kilinochchi 0.48). If used naively, the system would give **weaker warnings to several Northern and North-Western areas**. Those regions already have fewer health resources, so the model could widen an existing gap.
+# * **Uneven performance between districts.** F1 is high in high-burden districts (Gampaha 0.88, Monaragala 0.86, Galle 0.84) but low where high weeks are rare (Vavuniya 0.20, Mullaitivu 0.38, Kilinochchi 0.44, Badulla 0.47). If used naively, the system would give **weaker warnings to several Northern and less-resourced areas**. Those regions already have fewer health resources, so the model could widen an existing gap.
 # * **Reporting bias.** Districts with better hospital access and laboratory testing report a larger share of true cases. Their thresholds and labels are therefore more reliable. Under-reporting areas look "normal" more often than they really are.
-# * **Mitigations used or recommended:** per-district thresholds (used), per-district evaluation (§11, reported openly), district-specific decision thresholds or a lower alert threshold for low-burden districts, and keeping a human epidemiologist in the loop for every alert.
+# * **Mitigations used or recommended:** per-district thresholds (used), per-district evaluation (§12, reported openly), district-specific decision thresholds or a lower alert threshold for low-burden districts, and keeping a human epidemiologist in the loop for every alert.
 #
 # **Real-world impact and ethical considerations**
 # * **Benefit:** two weeks of warning lets MOH and PHI teams schedule fogging, larval-source reduction and community clean-ups before cases peak, which could reduce infections, hospital load and deaths.
-# * **Cost of errors:** on the test period the model raised **459 false alarms**, which waste insecticide, staff time and public trust and add to environmental exposure and insecticide resistance. It **missed 209 high weeks**, which can mean late response and more illness. The decision threshold favours recall, because a missed outbreak usually costs more than a false alarm.
-# * **Decision support, not decision making.** The model should support, never replace, the Epidemiology Unit's judgement. Automation bias (trusting a score blindly) is a real risk, which is why every prediction comes with a SHAP explanation in the app.
+# * **Cost of errors:** on the test period the model raised **477 false alarms**, which waste insecticide, staff time and public trust and add to environmental exposure and insecticide resistance. It **missed 216 high weeks**, which can mean late response and more illness. The decision threshold favours recall, because a missed outbreak usually costs more than a false alarm.
+# * **Decision support, not decision making.** The model should support, never replace, the Epidemiology Unit's judgement. Automation bias (trusting a score blindly) is a real risk, This is why a glass-box model was chosen: every prediction in the app comes with its exact term-by-term explanation.
 # * **Privacy and governance.** Only aggregate public data is used. Any operational deployment would need validation with the Epidemiology Unit, monitoring for drift (the weekly retraining has a quality gate), and clear communication that this is a research prototype, not an official alert system.
 #
 # **Future work**

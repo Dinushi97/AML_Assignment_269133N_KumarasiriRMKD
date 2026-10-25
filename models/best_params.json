@@ -1,44 +1,44 @@
 {
   "EBM (new algorithm)": {
-    "learning_rate": 0.01115579284069578,
+    "learning_rate": 0.0789329635930778,
     "max_leaves": 4,
-    "min_samples_leaf": 33,
-    "max_bins": 167,
+    "min_samples_leaf": 11,
+    "max_bins": 39,
     "interactions": 3,
     "smoothing_rounds": 50,
     "outer_bags": 8
   },
   "Logistic Regression": {
-    "C": 0.03148911647956861,
+    "C": 0.06672367170464207,
     "l1_ratio": 0.0,
     "class_weight": null
   },
   "Decision Tree": {
-    "max_depth": 6,
-    "min_samples_leaf": 244,
-    "criterion": "gini",
-    "class_weight": null
+    "max_depth": 13,
+    "min_samples_leaf": 137,
+    "criterion": "entropy",
+    "class_weight": "balanced"
   },
   "k-NN": {
-    "n_neighbors": 22,
-    "weights": "uniform",
+    "n_neighbors": 267,
+    "weights": "distance",
     "p": 1
   },
   "Random Forest": {
     "n_estimators": 300,
-    "max_depth": 16,
-    "min_samples_leaf": 44,
-    "max_features": "sqrt",
-    "max_samples": 0.33485016730091965
+    "max_depth": 7,
+    "min_samples_leaf": 24,
+    "max_features": 0.3,
+    "max_samples": 0.8921321619603104
   },
   "XGBoost": {
-    "n_estimators": 400,
-    "learning_rate": 0.17254716573280354,
-    "max_depth": 6,
-    "min_child_weight": 7.6611007077713635,
-    "subsample": 0.5780093202212182,
-    "colsample_bytree": 0.49359671220172163,
-    "reg_lambda": 0.01555019165426488,
-    "scale_pos_weight": 2.73235229154987
+    "n_estimators": 350,
+    "learning_rate": 0.05082341959721458,
+    "max_depth": 2,
+    "min_child_weight": 15.30883741573138,
+    "subsample": 0.5372753218398854,
+    "colsample_bytree": 0.9921321619603104,
+    "reg_lambda": 3.5416296712651336,
+    "scale_pos_weight": 1.3974313630683448
   }
 }
