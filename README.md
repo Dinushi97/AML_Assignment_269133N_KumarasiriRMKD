@@ -33,9 +33,19 @@ Test set: **January 2024 – May 2026**, 3,145 district-weeks that were never us
 <img src="reports/app_screenshots/2_district_forecast.png" width="49%">
 </p>
 
-**Can the EBM be pushed higher?** After tuning, seven further EBM variants were tried and scored by cross-validation only, so the test set was not used to choose them (`python -m scripts.ebm_cv_experiments`, results in `reports/ebm_cv_ablation.csv`).
-Mean CV PR-AUC: tuned EBM 0.787; 10 interactions 0.788; 20 interactions 0.787; slower learning rate 0.787; recency weighting 0.782–0.784; monotone constraints 0.784; finer bins 0.782.
-None changed the score by more than ±0.005, which is within fold-to-fold noise, so the tuned model was kept. Choosing a variant from the test results instead would leak the test set into model selection.
+**Could anything do better?** Eight more algorithms that were not covered in lectures and aren't deep learning were scored with the same expanding-window CV. The model was chosen by CV; test PR-AUC is listed for reference only (`python -m scripts.other_algorithms`, results in `reports/other_algorithms.csv`; report §3.4, notebook §12.2).
+
+| Algorithm | CV PR-AUC | Test PR-AUC | Interpretable |
+|---|---|---|---|
+| Stacking (EBM+LR+kNN+RF+XGB → LR) | 0.789 | 0.804 | no; built from lecture models |
+| **EBM (chosen)** | **0.786** | **0.777** | **exactly** |
+| NGBoost | 0.785 | 0.795 | no; gradient-boosting variant |
+| RuleFit | 0.783 | 0.796 | yes |
+| Extra Trees | 0.782 | 0.805 | no; Random Forest variant |
+| Spline GAM (pyGAM) | 0.782 | 0.794 | yes |
+| Gaussian Naive Bayes / LDA / QDA | 0.756 / 0.729 / 0.677 | 0.758 / 0.714 / 0.711 | partly |
+
+Seven EBM refinements were also scored by CV (`python -m scripts.ebm_cv_experiments`, results in `reports/ebm_cv_ablation.csv`): more interactions, finer bins, a slower learning rate, recency weighting and monotone constraints. They ranged from 0.782 to 0.788 CV PR-AUC, all within ±0.005 of the tuned model, so the tuned EBM was kept.
 
 
 ## Problem

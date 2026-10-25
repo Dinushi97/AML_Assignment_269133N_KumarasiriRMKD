@@ -670,6 +670,27 @@ fig.suptitle("Two-week-ahead EBM forecasts on the test period", y=1.0); fig.tigh
 # **Why EBM is kept as the proposed model.** The assignment asks for a *new* algorithm and for its behaviour to be explained. In a public-health setting, an alert that officials can audit term by term is worth a small loss in ranking accuracy. EBM delivers that while staying within cross-validation noise of the best black box and far above the naive baselines. The standard models are reported openly so the cost of this choice is visible.
 
 # %% [markdown]
+# ### 12.2 Could accuracy be higher? Other algorithms and EBM variants
+#
+# To check whether another **new** algorithm (not in the lectures, not deep learning) would do better, eight more algorithms and seven EBM refinements were scored with the **same expanding-window CV**.
+# Selection uses CV only. Test PR-AUC is listed for reference; choosing a model by test score would leak the test period into model selection.
+# The scripts are `scripts/other_algorithms.py` and `scripts/ebm_cv_experiments.py`; they take about 10 minutes, so their saved results are loaded here.
+
+# %%
+other = pd.read_csv(ROOT / "reports" / "other_algorithms.csv").sort_values("cv_pr_auc", ascending=False)
+print("Other algorithms not covered in lectures (sorted by CV PR-AUC):")
+print(other.round(4).to_string(index=False))
+ablation = pd.read_csv(ROOT / "reports" / "ebm_cv_ablation.csv")
+print("\nEBM refinements (CV PR-AUC, 4 outer bags during screening):")
+print(ablation.to_string(index=False))
+
+# %% [markdown]
+# **Reading.** By the selection criterion (CV), EBM is **2nd of 9**. Only stacking is higher, by 0.003, which is within fold noise, and stacking is a black box built from lecture models.
+# NGBoost and Extra Trees are close variants of gradient boosting and Random Forest. The interpretable alternatives (RuleFit, spline GAM) are below EBM in CV.
+# None of the EBM refinements changed CV PR-AUC by more than ±0.005, so **the tuned EBM is kept**.
+# Several alternatives score about 0.02–0.03 higher on the 2024–26 test period, which suggests smoother models adapt slightly better to the recent epidemic regime. This is recorded as a limitation (§16), not used to switch models.
+
+# %% [markdown]
 # ## 13. Explainability
 # EBM is interpretable by design, so explanations come from **three independent angles**:
 # 1. **EBM's own glass-box explanations:** global term importance, the learned shape functions (equivalent to exact partial-dependence curves), interaction heat maps, and exact local contributions.
@@ -897,7 +918,7 @@ print(f"Actual outcome     : {int(r['target_cases'])} cases -> {'HIGH RISK' if r
 # **Limitations of the model**
 # * **No weather inputs.** District rainfall and temperature are known dengue drivers with a 2–8 week lag. They weren't available as an open district-weekly series, so seasonality and national momentum stand in for them.
 # * **Fixed thresholds.** The 75th percentile for 2012–2021 is one reasonable definition of "high transmission". Others (an epidemic channel, or mean + 2 SD) would change the task. The test-period positive rate (34%) is higher than in training (20%), reflecting the post-2017 rise in dengue.
-# * **Accuracy cost of interpretability.** On the test period EBM is about 0.03 PR-AUC behind Random Forest, XGBoost and k-NN (§12.1). The project accepts this for transparency, but it's a real cost.
+# * **Accuracy cost of interpretability.** On the test period EBM is about 0.03 PR-AUC behind Random Forest, XGBoost and k-NN (§12.1). Further EBM tuning and eight other non-lecture algorithms didn't close the gap in CV (§12.2). The project accepts this for transparency, but it's a real cost.
 # * **Calibration.** Probabilities are used with a CV-chosen threshold (0.31), so treat them as risk scores. EBM's Brier score (0.138) is close to the other models'.
 # * **Short-term persistence carries much of the signal.** EBM adds clear value over persistence (recall +9 points), but it can't foresee outbreaks with no early signal in the counts (e.g. Monaragala, May 2024).
 #

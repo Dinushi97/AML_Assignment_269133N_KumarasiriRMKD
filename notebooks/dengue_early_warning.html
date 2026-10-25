@@ -11288,6 +11288,86 @@ P(EBM PR-AUC &gt; Random Forest PR-AUC) over bootstrap = 0.006
 </div>
 </div>
 </div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=0860d137">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="12.2-Could-accuracy-be-higher?-Other-algorithms-and-EBM-variants">12.2 Could accuracy be higher? Other algorithms and EBM variants<a class="anchor-link" href="#12.2-Could-accuracy-be-higher?-Other-algorithms-and-EBM-variants">¶</a></h3><p>To check whether another <strong>new</strong> algorithm (not in the lectures, not deep learning) would do better, eight more algorithms and seven EBM refinements were scored with the <strong>same expanding-window CV</strong>.
+Selection uses CV only. Test PR-AUC is listed for reference; choosing a model by test score would leak the test period into model selection.
+The scripts are <code>scripts/other_algorithms.py</code> and <code>scripts/ebm_cv_experiments.py</code>; they take about 10 minutes, so their saved results are loaded here.</p>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=5fb00c09">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="n">other</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">ROOT</span> <span class="o">/</span> <span class="s2">"reports"</span> <span class="o">/</span> <span class="s2">"other_algorithms.csv"</span><span class="p">)</span><span class="o">.</span><span class="n">sort_values</span><span class="p">(</span><span class="s2">"cv_pr_auc"</span><span class="p">,</span> <span class="n">ascending</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Other algorithms not covered in lectures (sorted by CV PR-AUC):"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">other</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span><span class="o">.</span><span class="n">to_string</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
+<span class="n">ablation</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">ROOT</span> <span class="o">/</span> <span class="s2">"reports"</span> <span class="o">/</span> <span class="s2">"ebm_cv_ablation.csv"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">EBM refinements (CV PR-AUC, 4 outer bags during screening):"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">ablation</span><span class="o">.</span><span class="n">to_string</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
+<pre>Other algorithms not covered in lectures (sorted by CV PR-AUC):
+                         algorithm  cv_pr_auc  test_pr_auc
+Stacking (EBM+LR+kNN+RF+XGB -&gt; LR)     0.7892       0.8043
+                     EBM (current)     0.7859       0.7755
+                           NGBoost     0.7848       0.7951
+                           RuleFit     0.7827       0.7957
+                       Extra Trees     0.7819       0.8054
+                Spline GAM (pyGAM)     0.7815       0.7938
+              Gaussian Naive Bayes     0.7563       0.7582
+                               LDA     0.7291       0.7135
+                               QDA     0.6768       0.7108
+
+EBM refinements (CV PR-AUC, 4 outer bags during screening):
+              variant  cv_pr_auc_mean_2019_2023
+              current                    0.7874
+        recency hl=4y                    0.7823
+        recency hl=8y                    0.7839
+       monotone level                    0.7837
+      interactions=10                    0.7884
+      interactions=20                    0.7866
+         max_bins=128                    0.7818
+lr=0.02 + more rounds                    0.7867
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=8bf18573">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<p><strong>Reading.</strong> By the selection criterion (CV), EBM is <strong>2nd of 9</strong>. Only stacking is higher, by 0.003, which is within fold noise, and stacking is a black box built from lecture models.
+NGBoost and Extra Trees are close variants of gradient boosting and Random Forest. The interpretable alternatives (RuleFit, spline GAM) are below EBM in CV.
+None of the EBM refinements changed CV PR-AUC by more than ±0.005, so <strong>the tuned EBM is kept</strong>.
+Several alternatives score about 0.02–0.03 higher on the 2024–26 test period, which suggests smoother models adapt slightly better to the recent epidemic regime. This is recorded as a limitation (§16), not used to switch models.</p>
+</div>
+</div>
+</div>
+</div>
 <div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=e69f3389">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
@@ -12854,7 +12934,7 @@ EBM was tuned with Optuna under expanding-window time-series cross-validation an
 <ul>
 <li><strong>No weather inputs.</strong> District rainfall and temperature are known dengue drivers with a 2–8 week lag. They weren't available as an open district-weekly series, so seasonality and national momentum stand in for them.</li>
 <li><strong>Fixed thresholds.</strong> The 75th percentile for 2012–2021 is one reasonable definition of "high transmission". Others (an epidemic channel, or mean + 2 SD) would change the task. The test-period positive rate (34%) is higher than in training (20%), reflecting the post-2017 rise in dengue.</li>
-<li><strong>Accuracy cost of interpretability.</strong> On the test period EBM is about 0.03 PR-AUC behind Random Forest, XGBoost and k-NN (§12.1). The project accepts this for transparency, but it's a real cost.</li>
+<li><strong>Accuracy cost of interpretability.</strong> On the test period EBM is about 0.03 PR-AUC behind Random Forest, XGBoost and k-NN (§12.1). Further EBM tuning and eight other non-lecture algorithms didn't close the gap in CV (§12.2). The project accepts this for transparency, but it's a real cost.</li>
 <li><strong>Calibration.</strong> Probabilities are used with a CV-chosen threshold (0.31), so treat them as risk scores. EBM's Brier score (0.138) is close to the other models'.</li>
 <li><strong>Short-term persistence carries much of the signal.</strong> EBM adds clear value over persistence (recall +9 points), but it can't foresee outbreaks with no early signal in the counts (e.g. Monaragala, May 2024).</li>
 </ul>

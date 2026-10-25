@@ -1,6 +1,7 @@
 """Screen other algorithms that were not covered in the lectures and are not deep learning.
 
 Selection is by expanding-window CV (2019-2023); test PR-AUC is printed for reference only.
+Extra packages (not needed by the app or CI):  pip install ngboost==0.5.11 imodels==3.0.4 pygam==0.12.0
 Run:  python -m scripts.other_algorithms
 """
 import json

@@ -117,6 +117,20 @@ Each <i>shape function</i> f<sub>j</sub> is learned by <b>cyclic gradient boosti
 </div>
 <figure><img src="figures/test_roc_pr.png" style="width:94%"><figcaption><b>Figure 2.</b> ROC and precision–recall curves on the test set. EBM (thick red line) and all standard models dominate the persistence baseline (×).</figcaption></figure>
 <p><b>What the results indicate.</b> (i) EBM is a useful early warning: compared with persistence, PR-AUC rises from 0.59 to 0.78 and recall from 71% to 80%, so about one in three outbreak weeks that persistence misses is caught two weeks ahead. (ii) In cross-validation, EBM (0.786) is <b>within 0.001 of the best black box</b> (XGBoost 0.787) and ahead of Random Forest. (iii) On the more epidemic test period, Random Forest, XGBoost and k-NN reach about 0.805 PR-AUC, about 0.03 above EBM. The bootstrap shows the gap is real, although F1 differs by only 0.015. This is the measured <b>cost of interpretability</b>, accepted in exchange for exact explanations. EBM still beats the interpretable decision tree, and beats logistic regression in cross-validation. (iv) The held-out Colombo week (27 Apr 2026; 300 cases) was predicted HIGH (P = 0.32 against a 0.31 threshold). Two weeks later Colombo reported 308 cases against a threshold of 291, so the prediction was correct.</p>
+<h3>3.4 Could accuracy be higher? Other algorithms and EBM variants</h3>
+<p>To check whether another new algorithm would do better, eight further algorithms that were not covered in lectures and are not deep learning were scored with the same expanding-window CV. The model was chosen by CV, not by test score, because selecting on the test period would leak it into model selection. Test PR-AUC is shown for reference only.</p>
+<table>
+<tr><th>Algorithm (not in lectures)</th><th class="n">CV PR-AUC</th><th class="n">Test PR-AUC</th><th>Interpretable</th><th>Note</th></tr>
+<tr><td>Stacking (EBM + LR + kNN + RF + XGB → LR)</td><td class="n">0.789</td><td class="n">0.804</td><td>No</td><td>built from lecture models</td></tr>
+<tr class="sel"><td>EBM (chosen)</td><td class="n">0.786</td><td class="n">0.777</td><td>Exactly</td><td>glass box</td></tr>
+<tr><td>NGBoost (natural-gradient boosting)</td><td class="n">0.785</td><td class="n">0.795</td><td>No</td><td>a gradient-boosting variant</td></tr>
+<tr><td>RuleFit (rules + lasso)</td><td class="n">0.783</td><td class="n">0.796</td><td>Yes</td><td>10× slower</td></tr>
+<tr><td>Extra Trees</td><td class="n">0.782</td><td class="n">0.805</td><td>No</td><td>Random Forest variant</td></tr>
+<tr><td>Spline GAM (pyGAM)</td><td class="n">0.782</td><td class="n">0.794</td><td>Yes</td><td>no interactions</td></tr>
+<tr><td>Gaussian Naive Bayes</td><td class="n">0.756</td><td class="n">0.758</td><td>Partly</td><td></td></tr>
+<tr><td>LDA / QDA</td><td class="n">0.729 / 0.677</td><td class="n">0.714 / 0.711</td><td>Partly</td><td></td></tr>
+</table>
+<p>On the selection criterion, EBM ranks second of nine. Only stacking is higher, by 0.003, which is within fold-to-fold noise; stacking is also a black box made of lecture models. Seven EBM refinements were tested the same way: more interactions (10 or 20), finer bins, a slower learning rate, recency weighting and monotone constraints. Their CV PR-AUC ranged from 0.782 to 0.788, all within ±0.005 of the tuned model, so the tuned EBM was kept. Several alternatives score about 0.02–0.03 higher on the test period, which suggests smoother models adapt slightly better to the recent epidemic regime. This is noted as a limitation, but it was not used to switch models. (Scripts: <code>scripts/other_algorithms.py</code> and <code>scripts/ebm_cv_experiments.py</code>.)</p>
 
 <h2>4. Explainability and interpretation</h2>
 <figure><img src="figures/ebm_shape_functions.png" style="width:100%"><figcaption><b>Figure 3.</b> EBM shape functions (exact partial dependence, with bagging error bands) for the four most important features.</figcaption></figure>
