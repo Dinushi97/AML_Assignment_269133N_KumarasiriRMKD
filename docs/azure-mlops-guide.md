@@ -171,15 +171,22 @@ Then open the app at **`https://<WEBAPP>.azurewebsites.net`**. The first start a
 * To retrain with new data: **Actions → Azure MLOps → Run workflow**, and tick *"Download the newest Epidemiology Unit data"*.
 * A failed quality gate stops the pipeline, and the previous model stays live.
 
-## 8. Costs and cleanup
+## 8. Costs and cleanup (US$100 student credit)
 
-* The compute cluster scales to **zero nodes**, so you pay only while a job runs (minutes per run).
-* The **App Service B1 plan** is billed for as long as it exists, and it's the main cost. Keep it until your demo or marking is done, then stop or delete it:
+| Resource | When it costs | Rough cost |
+|---|---|---|
+| App Service plan **B1** (hosts the app) | every hour it exists, even if the app is stopped | the largest item, roughly US$13/month |
+| Container registry **Basic** | every day it exists | roughly US$5/month |
+| Compute cluster `cpu-cluster` | only while a training job runs (scales to 0) | a few cents per run |
+| Storage, Key Vault, App Insights | tiny usage | cents |
+
+* There are **no scheduled or automatic runs**. Azure training runs only when you start it from the Actions tab.
+* Azure for Students has a **spending limit**: with no card attached, services are paused when the credit runs out rather than charged.
+* Check your remaining credit at <https://www.microsoftazuresponsorships.com/Balance>, or in the portal under *Cost Management*.
+* `az webapp stop` does **not** stop billing, because the B1 plan is charged while it exists. When marking is finished, delete everything:
   ```bash
-  az webapp stop --name $WEBAPP --resource-group $RG          # pause the app
-  az group delete --name $RG --yes                             # remove EVERYTHING (do this when the module is finished)
+  az group delete --name rg-dengue-mlops --yes     # removes the app, registry, workspace and storage
   ```
-* Check your remaining credit at <https://www.microsoftazuresponsorships.com/Balance>.
 
 ## 9. Troubleshooting
 
