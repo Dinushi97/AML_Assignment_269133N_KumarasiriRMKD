@@ -86,16 +86,23 @@ jobs:
             || { echo "::error title=Job submission failed::$(tail -c 2500 err.log | tr '\n' ' ')"; exit 1; }
           echo "job_name=$JOB" >> "$GITHUB_OUTPUT"
           echo "Azure ML job: $JOB"
-          az ml job stream --name "$JOB" 2>&1 | tee stream.log || true
-          STATUS=$(az ml job show --name "$JOB" --query status -o tsv)
-          echo "status: $STATUS"
+          # poll the status (az ml job stream can crash on log decoding); give up after ~90 minutes
+          for i in $(seq 1 180); do
+            STATUS=$(az ml job show --name "$JOB" --query status -o tsv 2>/dev/null || echo Unknown)
+            case "$STATUS" in Completed|Failed|Canceled|NotResponding) break;; esac
+            echo "$(date +%H:%M) $STATUS"; sleep 30
+          done
+          echo "final status: $STATUS"
           # the job fails (exit 1) when the model does not beat the persistence baseline
           if [ "$STATUS" != "Completed" ]; then
-            ERR=$(az ml job show --name "$JOB" --query "error.message" -o tsv 2>/dev/null | head -c 2500 | tr '\n' ' ')
-            echo "::error title=Azure ML job $STATUS::${ERR:-no error message}"
-            echo "::error title=Job log tail::$(tail -c 2500 stream.log | tr '\n' ' ')"
+            az ml job download --name "$JOB" --all --download-path joblogs >/dev/null 2>&1 || true
+            LOG=$(find joblogs -name "std_log*.txt" | head -1)
+            echo "::error title=Azure ML job $STATUS::$( [ -n "$LOG" ] && tail -c 2500 "$LOG" | tr '\n' ' ' || echo 'no job log found')"
             exit 1
           fi
+          az ml job download --name "$JOB" --all --download-path joblogs >/dev/null 2>&1 || true
+          LOG=$(find joblogs -name "std_log*.txt" | head -1)
+          [ -n "$LOG" ] && echo "::notice title=Training result::$(grep -E 'EBM|persistence|quality gate|saved' "$LOG" | tail -c 2000 | tr '\n' ' ')" || true
 
       - name: Register model in the Azure ML model registry
         run: |
