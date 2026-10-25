@@ -56,6 +56,19 @@ if ! az ml workspace show --name "$WS" --resource-group "$RG" >/dev/null 2>&1; t
 fi
 az configure --defaults group="$RG" workspace="$WS"
 
+step "Container registry for the workspace"
+# Azure ML normally creates this lazily; on some student subscriptions that never happens and every job
+# then fails with "ContainerRegistry ... was not found". Create it under the name the workspace expects.
+ACR_ID=$(az ml workspace show --name "$WS" --resource-group "$RG" --query container_registry -o tsv)
+if [ -n "$ACR_ID" ] && ! az acr show --ids "$ACR_ID" >/dev/null 2>&1; then
+  ACR_NAME=$(basename "$ACR_ID")
+  az acr create --name "$ACR_NAME" --resource-group "$RG" --sku Basic --location "$LOC" --admin-enabled true --only-show-errors -o none
+  WS_PID=$(az ml workspace show --name "$WS" --resource-group "$RG" --query identity.principal_id -o tsv)
+  az role assignment create --assignee-object-id "$WS_PID" --assignee-principal-type ServicePrincipal \
+    --role Contributor --scope "$(az acr show --name "$ACR_NAME" --query id -o tsv)" --only-show-errors -o none
+  az ml workspace sync-keys --name "$WS" --resource-group "$RG" --only-show-errors -o none || true
+fi
+
 step "Compute cluster cpu-cluster (scales to zero)"
 az ml compute show --name cpu-cluster >/dev/null 2>&1 || az ml compute create --file azure/compute.yml --only-show-errors -o none
 
