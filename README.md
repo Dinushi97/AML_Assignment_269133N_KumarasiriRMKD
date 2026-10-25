@@ -5,7 +5,7 @@ It covers all 26 RDHS areas and uses 20 years of official Sri Lankan surveillanc
 
 > MSc in AI · Machine Learning assignment · R.M.K.D. Kumarasiri (269133N)
 >
-> **Submission files:** report [`reports/Report_269133N_KumarasiriRMKD.pdf`](reports/Report_269133N_KumarasiriRMKD.pdf) · notebook [`notebooks/dengue_early_warning.ipynb`](notebooks/dengue_early_warning.ipynb) · demo video script [`docs/demo_video_script.md`](docs/demo_video_script.md) · Azure MLOps guide [`docs/azure-mlops-guide.md`](docs/azure-mlops-guide.md)
+> **Files:** notebook [`notebooks/dengue_early_warning.ipynb`](notebooks/dengue_early_warning.ipynb) (HTML copy: [`notebooks/dengue_early_warning.html`](notebooks/dengue_early_warning.html)) · Azure MLOps guide [`docs/azure-mlops-guide.md`](docs/azure-mlops-guide.md)
 
 ## Results at a glance
 
