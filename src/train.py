@@ -131,9 +131,12 @@ def main(argv=None):
                 mlflow.log_metrics({f"test_{k}": v for k, v in m.items()})
                 mlflow.log_metrics({f"baseline_{k}": v for k, v in base.items()})
                 mlflow.log_metric("train_seconds", time.time() - t0)
-                mlflow.log_dict(data_report, "data_report.json")
-                if passed:
-                    mlflow.log_artifact(args.out)
+                try:  # artifact upload is optional: the model also leaves the job via its output folder
+                    mlflow.log_dict(data_report, "data_report.json")
+                    if passed and not on_azure:
+                        mlflow.log_artifact(args.out)
+                except Exception as e:  # e.g. mlflow / azureml-mlflow version mismatch
+                    print("warning: MLflow artifact upload skipped:", type(e).__name__, e)
             print("logged to MLflow:", "Azure ML workspace" if on_azure else ROOT / "mlflow.db")
         except ImportError:
             print("mlflow not installed – skipping tracking")
