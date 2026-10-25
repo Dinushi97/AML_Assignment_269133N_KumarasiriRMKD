@@ -116,7 +116,7 @@ Docker: `docker build -t dengue-ew . && docker run -p 8501:8501 dengue-ew`
 
 ```mermaid
 flowchart LR
-  dev[git push / weekly schedule] --> gh[GitHub Actions]
+  dev[manual run: Actions → Run workflow] --> gh[GitHub Actions]
   gh --> t[pytest]
   t --> d[Azure ML data asset<br/>version = content hash]
   d --> j[Azure ML training job<br/>MLflow tracking + quality gate]
@@ -134,7 +134,7 @@ flowchart LR
 | Quality gate | The job fails, and nothing is registered or deployed, unless the model beats the persistence baseline on PR-AUC and F1 |
 | Model registry | Azure ML model `dengue-ews-ebm`, one version per passing run, tagged with git commit and job |
 | Continuous deployment | `azure-mlops.yml` downloads the latest registered model and deploys the Streamlit app to Azure App Service |
-| Continuous training | Weekly schedule fetches new Epidemiology Unit data, then retrains, gates, registers and redeploys |
+| Retraining on demand | Started by hand (Actions → Azure MLOps → Run workflow). It fetches nothing automatically and has no schedule, to protect the student credit |
 | Secure auth | GitHub → Azure via OIDC with a managed identity; no stored passwords |
 | Local equivalent | `python -m src.train` logs to a local MLflow SQLite store; `Dockerfile` for container serving |
 
@@ -160,7 +160,7 @@ flowchart LR
 | 16 | Save and reuse the trained model | Expected | ✅ | `models/dengue_model.pkl` (joblib/pickle bundle), reloaded to predict the held-out data point (§14) and by the app |
 | 17 | Use AI coding assistants | Permitted | ✅ | Used to help write code and the app (declare as your module requires) |
 | 18 | Understand and justify your own ML work | Required | ✅ | Every design decision is justified in the notebook: target, leakage control, metrics, tuning spaces, selection rule, limitations |
-| 19 | Implement MLOps | Optional (bonus) | ✅ | Azure ML: versioned data asset and environment, cloud training job, MLflow tracking, quality gate, model registry. GitHub Actions CI/CD/CT with OIDC; app auto-deployed to Azure App Service ([guide](docs/azure-mlops-guide.md)) |
+| 19 | Implement MLOps | Optional (bonus) | ✅ | Azure ML: versioned data asset and environment, cloud training job, MLflow tracking, quality gate, model registry. GitHub Actions CI/CD with OIDC (Azure runs on demand only, to protect the student credit); app auto-deployed to Azure App Service ([guide](docs/azure-mlops-guide.md)) |
 | 20 | GitHub repository + deployment | Bonus | ⏳ | Repo-ready with workflows. Follow the [guide](docs/azure-mlops-guide.md) to push to GitHub and deploy on Azure, then add the live URL above |
 | 21 | Avoid deep learning, CV and RL | Restriction | ✅ | No deep learning: EBM is a boosted additive model. Comparisons are classical ML only |
 | 22 | Use a new problem | Required | ✅ | Dengue outbreak early warning, not the commonly used car or house price datasets |
@@ -171,7 +171,7 @@ flowchart LR
 
 * **No weather inputs.** District rainfall and temperature are known dengue drivers. They weren't available as an open district-weekly series, so seasonality and national momentum stand in for them. Adding Department of Meteorology rainfall is the clearest next step.
 * **Reported cases, not infections.** Changes in testing and reporting (COVID-19 in 2020–21, the Monaragala 2020 gap) affect the labels.
-* **Thresholds are fixed** at the 2012–2021 75th percentile. If the baseline keeps rising, they should be re-estimated periodically, which the weekly Azure retraining makes easy.
+* **Thresholds are fixed** at the 2012–2021 75th percentile. If the baseline keeps rising, they should be re-estimated periodically, which the on-demand Azure retraining makes easy.
 * **Accuracy cost of interpretability:** about 0.03 PR-AUC below the best black boxes on the test period.
 * **Uneven performance:** F1 0.88 in Gampaha but 0.20–0.47 in Vavuniya, Mullaitivu, Kilinochchi and Badulla, where high weeks are rare. Used naively, it would give weaker warnings to areas with fewer resources. District-specific alert thresholds and human review are recommended.
 * **Ethics:** aggregate public data only, with no personal information. This is decision support with a human in the loop. It's for research and education, not an official alert system.

@@ -1,23 +1,15 @@
 name: Azure MLOps – test, train, register, deploy
 
-# Runs on every push to main that touches the model, data, app or Azure config,
-# every Tuesday after the weekly epidemiological report (continuous training),
-# or by hand from the Actions tab.
+# Cost control (Azure for Students credit): this workflow runs ONLY when started by hand
+# from GitHub → Actions → "Azure MLOps" → Run workflow. No schedule, no automatic runs on push.
+# Unit tests still run for free on every push via ci.yml.
 on:
-  push:
-    branches: [main]
-    paths:
-      - "src/**"
-      - "app/**"
-      - "azure/**"
-      - "data/raw/**"
-      - "models/best_params.json"
-      - "models/model_metadata.json"
-      - "requirements.txt"
-      - ".github/workflows/azure-mlops.yml"
-  schedule:
-    - cron: "30 3 * * 2"   # Tuesday 09:00 Sri Lanka time
   workflow_dispatch:
+    inputs:
+      fetch_latest_data:
+        description: "Download the newest Epidemiology Unit data before training"
+        type: boolean
+        default: false
 
 permissions:
   id-token: write   # OIDC login to Azure (no passwords stored in GitHub)
@@ -63,8 +55,8 @@ jobs:
           az extension add --name ml --yes
           az configure --defaults group="$RESOURCE_GROUP" workspace="$WORKSPACE"
 
-      - name: Fetch the latest Epidemiology Unit data (scheduled runs only)
-        if: github.event_name == 'schedule'
+      - name: Fetch the latest Epidemiology Unit data (only if requested)
+        if: inputs.fetch_latest_data
         run: |
           pip install pandas==3.0.5 pyreadr==0.5.8
           python -m src.fetch_data

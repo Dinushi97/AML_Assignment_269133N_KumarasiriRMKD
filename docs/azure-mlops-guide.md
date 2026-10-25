@@ -9,7 +9,7 @@ This guide takes the project from your laptop to a full MLOps setup:
 
 ```mermaid
 flowchart LR
-  dev[git push / weekly schedule] --> gh[GitHub Actions]
+  dev[manual run: Actions → Run workflow] --> gh[GitHub Actions]
   gh --> t[1 · pytest<br/>leakage + data tests]
   t --> d[2 · register data asset<br/>version = content hash]
   d --> j[3 · Azure ML training job<br/>validate → train → evaluate → quality gate<br/>MLflow metrics]
@@ -165,10 +165,10 @@ Open **Azure ML studio** at <https://ml.azure.com>, choose workspace `mlw-dengue
 
 Then open the app at **`https://<WEBAPP>.azurewebsites.net`**. The first start after a deploy takes 2–5 minutes while App Service installs the packages.
 
-## 7. Continuous training
+## 7. Retraining (on demand only)
 
-* **Every Tuesday 09:00 Sri Lanka time**, the workflow fetches the newest Epidemiology Unit data, registers it as a new data version, retrains, and deploys only if the new model still beats the persistence baseline.
-* Run it any time: **Actions → Azure MLOps → Run workflow**.
+* To protect the US$100 student credit, the Azure pipeline **never runs by itself**: it has no schedule and doesn't run on push.
+* To retrain with new data: **Actions → Azure MLOps → Run workflow**, and tick *"Download the newest Epidemiology Unit data"*.
 * A failed quality gate stops the pipeline, and the previous model stays live.
 
 ## 8. Costs and cleanup
@@ -195,6 +195,6 @@ Then open the app at **`https://<WEBAPP>.azurewebsites.net`**. The first start a
 
 ## 10. What to write in your report (MLOps section)
 
-> The project follows a CI/CD/CT MLOps design on Microsoft Azure. Source code is versioned in GitHub. Each push to `main` runs a GitHub Actions pipeline that (1) runs unit tests for data validation and temporal leakage; (2) registers the raw data as a versioned Azure ML data asset, using the file's hash as its version; (3) submits an Azure ML command job on an auto-scaling CPU cluster with a pinned environment, which validates the data, trains the tuned EBM model, evaluates it on the 2024–2026 test period and logs metrics to MLflow in the workspace; (4) applies a quality gate, so the model is registered in the Azure ML model registry only if it beats the persistence baseline on PR-AUC and F1; and (5) redeploys the Streamlit application on Azure App Service with the latest registered model. A weekly scheduled run fetches new Epidemiology Unit data and repeats the cycle (continuous training). Authentication uses OpenID Connect with a managed identity, so no credentials are stored in the repository.
+> The project follows a CI/CD/CT MLOps design on Microsoft Azure. Source code is versioned in GitHub. Each push to `main` runs a GitHub Actions pipeline that (1) runs unit tests for data validation and temporal leakage; (2) registers the raw data as a versioned Azure ML data asset, using the file's hash as its version; (3) submits an Azure ML command job on an auto-scaling CPU cluster with a pinned environment, which validates the data, trains the tuned EBM model, evaluates it on the 2024–2026 test period and logs metrics to MLflow in the workspace; (4) applies a quality gate, so the model is registered in the Azure ML model registry only if it beats the persistence baseline on PR-AUC and F1; and (5) redeploys the Streamlit application on Azure App Service with the latest registered model. Authentication uses OpenID Connect with a managed identity, so no credentials are stored in the repository.
 
 Include the diagram at the top of this page and the screenshots from step 6.
