@@ -1,5 +1,7 @@
-# training, notebook, explainability, MLOps and tests
+# training, notebook, comparison models, explainability, MLOps and tests
 -r requirements.txt
+xgboost==3.4.1
+shap==0.54.1
 optuna==5.0.0
 lime==0.2.0.1
 seaborn==0.13.2

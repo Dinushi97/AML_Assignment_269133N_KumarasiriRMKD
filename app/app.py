@@ -154,24 +154,27 @@ with tab_dist:
         tgt = alt.Chart(pd.DataFrame({"x": [row["target_date"]]})).mark_rule(color="black").encode(x="x:T")
         st.altair_chart((bars + thr_line + tgt).properties(height=260), width="stretch")
 
-    with st.expander("Why this prediction? (SHAP explanation)", expanded=True):
-        try:
-            import shap
-            model = bundle["model"]
-            if type(model).__name__ == "TimeSeriesStack":  # stacking ensemble -> explain its CatBoost base learner
-                model = model.fitted_["CatBoost"]
-            ex = shap.TreeExplainer(model)
-            sv = ex(res.loc[res["district"] == district, bundle["features"]])
-            if sv.values.ndim == 3:
-                sv = sv[:, :, 1]
-            fig = plt.figure(figsize=(8, 4.6))
-            shap.plots.waterfall(sv[0], max_display=10, show=False)
-            st.pyplot(plt.gcf(), clear_figure=True)
-            unit = "probability" if type(model).__name__ == "RandomForestClassifier" else "log-odds"
-            st.caption(f"Red bars push the forecast towards a high-risk week and blue bars push it down ({unit} units). "
+    with st.expander("Why this prediction? (exact EBM explanation)", expanded=True):
+        model = bundle["model"]
+        x_row = res.loc[res["district"] == district, bundle["features"]]
+        if hasattr(model, "eval_terms"):  # Explainable Boosting Machine: the prediction IS the sum of these terms
+            intercept = float(np.atleast_1d(model.intercept_)[0])
+            contrib = pd.Series(model.eval_terms(x_row)[0], index=list(model.term_names_))
+            top = contrib.reindex(contrib.abs().sort_values(ascending=False).index).head(10)
+            cdf = pd.DataFrame({"term": top.index, "contribution": top.values})
+            cdf["direction"] = np.where(cdf["contribution"] > 0, "raises risk", "lowers risk")
+            ch = alt.Chart(cdf).mark_bar().encode(
+                x=alt.X("contribution:Q", title="contribution to log-odds of a high-risk week"),
+                y=alt.Y("term:N", sort=None, title=None),
+                color=alt.Color("direction:N", scale=alt.Scale(domain=["raises risk", "lowers risk"], range=["#d64545", "#2a6f97"]), title=None),
+                tooltip=["term", alt.Tooltip("contribution:Q", format="+.3f")]).properties(height=320)
+            st.altair_chart(ch, width="stretch")
+            logit = intercept + contrib.sum()
+            st.caption(f"The EBM is a glass-box model: baseline {intercept:+.2f} + the sum of all {len(contrib)} term contributions "
+                       f"({contrib.sum():+.2f}) = {logit:+.2f} log-odds, which is P = {1 / (1 + np.exp(-logit)):.2f}. Terms with '&' are pairwise interactions. "
                        "Feature values are log ratios to the district threshold: 0 means 'at threshold' and −1 means about 2.7× below it.")
-        except Exception as e:  # keep the app usable if shap is unavailable
-            st.warning(f"SHAP explanation unavailable: {e}")
+        else:
+            st.info("Per-prediction explanation is available for the EBM model.")
         desc = pd.DataFrame({"feature": bundle["features"], "value": row[bundle["features"]].astype(float).round(3).values,
                              "meaning": [bundle["feature_descriptions"][f] for f in bundle["features"]]})
         st.dataframe(desc, hide_index=True, width="stretch")
@@ -201,7 +204,7 @@ with tab_perf:
         st.subheader("Test set (Jan 2024 – May 2026), never used for training or tuning")
         st.dataframe(pd.read_csv(res_path, index_col=0).round(3), width="stretch")
     figs = [("test_roc_pr.png", "ROC and precision–recall curves"), ("test_confusion_calibration.png", "Confusion matrix and calibration"),
-            ("shap_beeswarm.png", "SHAP global explanation"), ("test_per_district.png", "Per-district performance"),
+            ("ebm_importance.png", "EBM global term importance"), ("ebm_shape_functions.png", "EBM shape functions"), ("test_per_district.png", "Per-district performance"),
             ("test_timelines.png", "Forecasts vs actual outcomes")]
     cols = st.columns(2)
     for i, (f, cap) in enumerate(figs):

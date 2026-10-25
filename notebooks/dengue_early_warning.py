@@ -1,6 +1,6 @@
 # %% [markdown]
 # # Dengue Early-Warning for Sri Lankan Districts
-# ### Predicting high-transmission dengue weeks two weeks ahead with tuned tree ensembles, SHAP and LIME
+# ### Predicting high-transmission dengue weeks two weeks ahead with an Explainable Boosting Machine (EBM), explained with its glass-box terms, SHAP and LIME
 #
 # **Module:** Applied Machine Learning – final assignment
 #
@@ -60,19 +60,20 @@ from sklearn.base import clone
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import (roc_auc_score, average_precision_score, f1_score, precision_score,
                              recall_score, balanced_accuracy_score, brier_score_loss,
                              roc_curve, precision_recall_curve, confusion_matrix, ConfusionMatrixDisplay)
 from sklearn.calibration import calibration_curve
 from xgboost import XGBClassifier
-from lightgbm import LGBMClassifier
-from catboost import CatBoostClassifier
-import optuna, shap, lime, lime.lime_tabular
+from interpret.glassbox import ExplainableBoostingClassifier   # the new algorithm
+import interpret, optuna, shap, lime, lime.lime_tabular
 
 from src.features import (load_raw, clean, fit_reference, build_features, split, time_series_folds,
                           FEATURES, FEATURE_DESCRIPTIONS, HORIZON, REFERENCE_YEARS)
-from src.models import PersistenceBaseline, TimeSeriesStack
+from src.models import PersistenceBaseline
 
 SEED = 42
 np.random.seed(SEED)
@@ -84,9 +85,8 @@ plt.rcParams.update({"figure.dpi": 110, "axes.titleweight": "bold"})
 def savefig(name):
     plt.savefig(FIG / f"{name}.png", dpi=130, bbox_inches="tight")
 
-print("numpy", np.__version__, "| pandas", pd.__version__, "| xgboost", __import__("xgboost").__version__,
-      "| lightgbm", __import__("lightgbm").__version__, "| catboost", __import__("catboost").__version__,
-      "| shap", shap.__version__)
+print("numpy", np.__version__, "| pandas", pd.__version__, "| interpret (EBM)", interpret.__version__,
+      "| shap", shap.__version__, "| optuna", optuna.__version__)
 
 # %% [markdown]
 # ## 4. Load and inspect the raw data
@@ -288,7 +288,7 @@ sns.heatmap(feat[FEATURES].dropna().corr(), cmap="vlag", center=0, ax=ax, annot=
 ax.set_title("Feature correlations"); savefig("eda_feature_corr"); plt.show()
 
 # %% [markdown]
-# The lag and moving-average features are strongly correlated with each other, which is expected. Tree ensembles can handle collinear inputs. The logistic-regression baseline uses regularisation for the same reason.
+# The lag and moving-average features are strongly correlated with each other, which is expected. EBM fits one feature at a time in small cyclic steps, which makes it robust to collinear inputs. The logistic-regression comparison model uses regularisation for the same reason.
 #
 # ### 6.5 Chronological train / validation / test split (with purging)
 # * **Train:** report weeks in 2007–2021 · **Validation:** 2022–2023 · **Test:** 2024 → May 2026 (never used for any decision)
@@ -331,11 +331,11 @@ plt.xticks(rotation=45); savefig("eda_class_balance"); plt.show()
 # %% [markdown]
 # The classes are imbalanced in training (about 20% positive) and the positive rate **shifts over time** (82% in 2017, 7% in 2021). Because of this:
 # * **PR-AUC** (average precision) is the main tuning and selection metric. Unlike accuracy, it focuses on the positive class.
-# * Class weights / `scale_pos_weight` are **tuned** as hyperparameters.
+# * Class weighting is **tuned** for the standard models that support it, and every model's decision threshold is chosen on out-of-fold predictions.
 # * The decision threshold is chosen on the out-of-fold CV predictions, not left at 0.5.
 #
 # ### 6.6 Scaling
-# Tree models don't depend on feature scale, so they use the raw engineered features. Logistic regression uses a `StandardScaler` **inside a Pipeline**, which is fitted on each training fold only, so there's no leakage.
+# EBM and the tree models don't depend on feature scale, so they use the raw engineered features. Logistic regression and k-NN (which is distance-based) use a `StandardScaler` **inside a Pipeline**, which is fitted on each training fold only, so there's no leakage.
 
 # %%
 sc = StandardScaler().fit(X_dev)
@@ -386,79 +386,113 @@ cv_rows.append({"model": "Seasonal naive (last year)", "stage": "baseline",
 display(pd.DataFrame(cv_rows).round(3))
 
 # %% [markdown]
-# ## 8. Models with default hyperparameters (reference point only)
-# These are trained **only to show the effect of tuning**. None of them is a candidate for the final model.
+# ## 8. The new algorithm: Explainable Boosting Machine (EBM)
+#
+# **What it is.** The Explainable Boosting Machine (Lou, Caruana et al., KDD 2012/2013; Nori et al., *InterpretML*, Microsoft Research, 2019) is a modern **generalized additive model with pairwise interactions (GA²M)**:
+#
+# $$\text{logit}\,P(y=1\mid x) \;=\; \beta_0 \;+\; \sum_{j} f_j(x_j) \;+\; \sum_{(i,j)\in\mathcal{I}} f_{ij}(x_i, x_j)$$
+#
+# Each $f_j$ is a **shape function** learned for one feature, and each $f_{ij}$ is a small 2-D function for a pair of features. It's trained like this:
+# 1. **Cyclic gradient boosting, one feature at a time.** In each round EBM visits every feature in turn and fits a *very small* tree (2–4 leaves) to the current residuals, *using only that feature*, with a tiny learning rate. Thousands of rounds build a smooth, non-linear $f_j$ for each feature without features interfering with each other.
+# 2. **Bagging** (outer bags) averages several runs, which smooths the shape functions and gives error bars.
+# 3. **Interaction detection (FAST)** ranks feature pairs and adds the strongest $f_{ij}$ terms in a second stage.
+#
+# Because the final model is a **sum of 1-D and 2-D lookup tables**, every prediction decomposes *exactly* into per-feature contributions. It's a **glass-box** model, unlike black-box ensembles that need post-hoc explainers.
+#
+# **How it differs from the standard models taught in the module** (these are used below only as comparisons):
+#
+# | | Logistic regression | Decision tree | k-NN | Random Forest / XGBoost | **EBM (new)** |
+# |---|---|---|---|---|---|
+# | Model form | linear sum of features | one tree | stored training examples | many trees on *all* features, averaged or boosted | **additive sum of per-feature functions + a few pairwise terms** |
+# | Non-linear effects | no (unless engineered) | yes, as coarse steps | yes, implicitly | yes | **yes, as a smooth learned curve per feature** |
+# | Interactions | none | yes, unrestricted | implicit | yes, unrestricted (hard to see) | **only selected pairs, each visible as a heat map** |
+# | Interpretability | coefficients | readable only when shallow | none (lazy) | needs SHAP/LIME (approximate) | **exact, built-in global and local explanations** |
+# | Needs scaling | yes | no | yes (distance-based) | no | **no** |
+# | Accuracy on tabular data | often too simple | high variance | weak in many dimensions | usually high | **usually on par with RF/boosting** |
+#
+# **Why EBM for this problem.** The EDA showed threshold-like, non-linear effects (risk jumps as a district nears its threshold), a few clear interactions (level × season, district × national wave), and collinear lag features. For a **public-health early warning**, officials must be able to **see and trust *why*** a district is flagged. EBM promises black-box-level accuracy while staying fully interpretable, and the comparison below tests whether that holds here.
+
+# %% [markdown]
+# ## 9. Models with default hyperparameters (reference point only)
+# The new algorithm (EBM) and five **standard models** (logistic regression, decision tree, k-NN, Random Forest, XGBoost) are first run with library defaults. This shows how much tuning matters. Logistic regression and k-NN use a `StandardScaler` inside a pipeline.
 
 # %%
+def ebm(**kw):
+    base = dict(random_state=SEED, n_jobs=-1)
+    base.update(kw)
+    return ExplainableBoostingClassifier(**base)
+
 default_models = {
+    "EBM (new algorithm)": ebm(),
     "Logistic Regression": Pipeline([("scale", StandardScaler()), ("clf", LogisticRegression(max_iter=1000))]),
+    "Decision Tree": DecisionTreeClassifier(random_state=SEED),
+    "k-NN": Pipeline([("scale", StandardScaler()), ("clf", KNeighborsClassifier())]),
     "Random Forest": RandomForestClassifier(random_state=SEED, n_jobs=-1),
     "XGBoost": XGBClassifier(random_state=SEED, n_jobs=-1, eval_metric="logloss"),
-    "LightGBM": LGBMClassifier(random_state=SEED, verbose=-1),
-    "CatBoost": CatBoostClassifier(random_seed=SEED, verbose=0, thread_count=-1),
 }
 default_scores = {}
 for name, m in default_models.items():
     t0 = time.time(); p, s = cv_oof(m)
     default_scores[name] = s.mean()
     cv_rows.append({"model": name, "stage": "default", "CV PR-AUC": s.mean(), "CV PR-AUC sd": s.std(), "F1 @0.5": f1_score(y_oof, p >= .5)})
-    print(f"{name:20s} default CV PR-AUC = {s.mean():.4f}  ({time.time()-t0:.0f}s)")
+    print(f"{name:22s} default CV PR-AUC = {s.mean():.4f}  ({time.time()-t0:.0f}s)")
 
 # %% [markdown]
-# ## 9. Hyperparameter tuning (Optuna, Bayesian TPE search, time-series CV)
+# ## 10. Hyperparameter tuning (Optuna, Bayesian TPE search, time-series CV)
+# **Objective:** mean PR-AUC over the five expanding-window folds. The EBM gets the largest budget because it's the proposed model. The standard models are tuned too, so the comparison is fair.
 #
-# Every model gets a search space designed for this problem. **Objective = mean PR-AUC over the five expanding-window folds.**
-# Key design choices:
-# * **Shallow trees, strong leaf constraints** (`min_child_samples`, `min_samples_leaf`, `min_child_weight`) and **L1/L2 penalties**. There are only about 20k rows, the features are noisy, and the regime changes between years, so overfitting is the main risk.
-# * **Row and column subsampling**, which decorrelates trees and helps with collinear lag features.
-# * **Class weighting** (`class_weight`, `scale_pos_weight`, `auto_class_weights`) is searched, because the positive rate varies a lot.
-# * A low learning rate paired with more trees.
+# **EBM search space and why:**
+# * `learning_rate` (0.003–0.1, log) and `max_leaves` (2–4): EBM's core design is many *tiny* steps. Smaller steps give smoother shape functions but need more rounds.
+# * `min_samples_leaf` (2–100, log) and `max_bins` (32–512): how finely each shape function can bend. Fewer bins and larger leaves resist noise in small districts.
+# * `interactions` (0–20): how many pairwise terms to add. 0 gives a pure additive GAM, which is the most interpretable.
+# * `smoothing_rounds` (0–500): initial rounds with random splits, which make the shape functions smoother and less jagged.
+# * `outer_bags` is fixed at 4 during the search (for speed) and raised to 8 for the final model.
 
 # %%
 optuna.logging.set_verbosity(optuna.logging.WARNING)
-spw_max = 3.0
+
+def ebm_space(t, bags=4):
+    return ebm(learning_rate=t.suggest_float("learning_rate", 0.003, 0.1, log=True),
+               max_leaves=t.suggest_int("max_leaves", 2, 4),
+               min_samples_leaf=t.suggest_int("min_samples_leaf", 2, 100, log=True),
+               max_bins=t.suggest_int("max_bins", 32, 512, log=True),
+               interactions=t.suggest_int("interactions", 0, 20),
+               smoothing_rounds=t.suggest_int("smoothing_rounds", 0, 500, step=50),
+               outer_bags=bags)
 
 def lr_space(t):
     return Pipeline([("scale", StandardScaler()), ("clf", LogisticRegression(
         C=t.suggest_float("C", 1e-3, 10, log=True), l1_ratio=t.suggest_categorical("l1_ratio", [0.0, 0.5, 1.0]),
         solver="saga", class_weight=t.suggest_categorical("class_weight", [None, "balanced"]), max_iter=3000))])
 
+def dt_space(t):
+    return DecisionTreeClassifier(max_depth=t.suggest_int("max_depth", 2, 14),
+                                  min_samples_leaf=t.suggest_int("min_samples_leaf", 5, 300, log=True),
+                                  criterion=t.suggest_categorical("criterion", ["gini", "entropy"]),
+                                  class_weight=t.suggest_categorical("class_weight", [None, "balanced"]), random_state=SEED)
+
+def knn_space(t):
+    return Pipeline([("scale", StandardScaler()), ("clf", KNeighborsClassifier(
+        n_neighbors=t.suggest_int("n_neighbors", 5, 300, log=True),
+        weights=t.suggest_categorical("weights", ["uniform", "distance"]), p=t.suggest_categorical("p", [1, 2])))])
+
 def rf_space(t):
     return RandomForestClassifier(
-        n_estimators=t.suggest_int("n_estimators", 200, 500, step=100), max_depth=t.suggest_int("max_depth", 4, 16),
+        n_estimators=t.suggest_int("n_estimators", 200, 400, step=100), max_depth=t.suggest_int("max_depth", 4, 16),
         min_samples_leaf=t.suggest_int("min_samples_leaf", 5, 100, log=True),
-        max_features=t.suggest_categorical("max_features", ["sqrt", 0.3, 0.5, 0.8]),
-        max_samples=t.suggest_float("max_samples", 0.3, 0.9),
-        class_weight=t.suggest_categorical("class_weight", [None, "balanced_subsample"]), n_jobs=-1, random_state=SEED)
+        max_features=t.suggest_categorical("max_features", ["sqrt", 0.3, 0.5]),
+        max_samples=t.suggest_float("max_samples", 0.3, 0.9), n_jobs=-1, random_state=SEED)
 
 def xgb_space(t):
     return XGBClassifier(
-        n_estimators=t.suggest_int("n_estimators", 200, 900, step=50), learning_rate=t.suggest_float("learning_rate", 0.01, 0.2, log=True),
+        n_estimators=t.suggest_int("n_estimators", 200, 800, step=50), learning_rate=t.suggest_float("learning_rate", 0.01, 0.2, log=True),
         max_depth=t.suggest_int("max_depth", 2, 7), min_child_weight=t.suggest_float("min_child_weight", 1, 30, log=True),
         subsample=t.suggest_float("subsample", 0.5, 1.0), colsample_bytree=t.suggest_float("colsample_bytree", 0.4, 1.0),
-        gamma=t.suggest_float("gamma", 0, 5), reg_lambda=t.suggest_float("reg_lambda", 1e-2, 20, log=True),
-        reg_alpha=t.suggest_float("reg_alpha", 1e-3, 5, log=True), scale_pos_weight=t.suggest_float("scale_pos_weight", 1, spw_max),
+        reg_lambda=t.suggest_float("reg_lambda", 1e-2, 20, log=True), scale_pos_weight=t.suggest_float("scale_pos_weight", 1, 3),
         tree_method="hist", eval_metric="logloss", n_jobs=-1, random_state=SEED)
 
-def lgbm_space(t):
-    return LGBMClassifier(
-        n_estimators=t.suggest_int("n_estimators", 200, 900, step=50), learning_rate=t.suggest_float("learning_rate", 0.01, 0.2, log=True),
-        num_leaves=t.suggest_int("num_leaves", 4, 64, log=True), max_depth=t.suggest_int("max_depth", 3, 10),
-        min_child_samples=t.suggest_int("min_child_samples", 10, 300, log=True),
-        subsample=t.suggest_float("subsample", 0.5, 1.0), subsample_freq=1, colsample_bytree=t.suggest_float("colsample_bytree", 0.4, 1.0),
-        reg_lambda=t.suggest_float("reg_lambda", 1e-3, 20, log=True), reg_alpha=t.suggest_float("reg_alpha", 1e-3, 5, log=True),
-        scale_pos_weight=t.suggest_float("scale_pos_weight", 1, spw_max), random_state=SEED, verbose=-1, n_jobs=-1)
-
-def cat_space(t):
-    return CatBoostClassifier(
-        iterations=t.suggest_int("iterations", 300, 900, step=100), learning_rate=t.suggest_float("learning_rate", 0.02, 0.2, log=True),
-        depth=t.suggest_int("depth", 3, 8), l2_leaf_reg=t.suggest_float("l2_leaf_reg", 1, 30, log=True),
-        random_strength=t.suggest_float("random_strength", 0.1, 5, log=True), bagging_temperature=t.suggest_float("bagging_temperature", 0, 1),
-        auto_class_weights=t.suggest_categorical("auto_class_weights", ["None", "SqrtBalanced", "Balanced"]),
-        random_seed=SEED, verbose=0, thread_count=-1)
-
-spaces = {"Logistic Regression": (lr_space, 15), "Random Forest": (rf_space, 20), "XGBoost": (xgb_space, 30),
-          "LightGBM": (lgbm_space, 30), "CatBoost": (cat_space, 20)}
+spaces = {"EBM (new algorithm)": (ebm_space, 20), "Logistic Regression": (lr_space, 10), "Decision Tree": (dt_space, 20),
+          "k-NN": (knn_space, 15), "Random Forest": (rf_space, 10), "XGBoost": (xgb_space, 20)}
 
 studies, tuned = {}, {}
 for name, (space, n_trials) in spaces.items():
@@ -467,14 +501,17 @@ for name, (space, n_trials) in spaces.items():
     study.optimize(lambda t: cv_oof(space(t))[1].mean(), n_trials=n_trials)
     studies[name] = study
     tuned[name] = space(optuna.trial.FixedTrial(study.best_params))
-    print(f"{name:20s} best CV PR-AUC = {study.best_value:.4f}  (default {default_scores[name]:.4f}) | {n_trials} trials, {time.time()-t0:.0f}s")
+    print(f"{name:22s} best CV PR-AUC = {study.best_value:.4f}  (default {default_scores[name]:.4f}) | {n_trials} trials, {time.time()-t0:.0f}s")
 
+# the final EBM uses more outer bags than the search (smoother shape functions, same settings otherwise)
+tuned["EBM (new algorithm)"] = ebm_space(optuna.trial.FixedTrial(studies["EBM (new algorithm)"].best_params), bags=8)
 best_params = {n: s.best_params for n, s in studies.items()}
+best_params["EBM (new algorithm)"]["outer_bags"] = 8
 json.dump(best_params, open(MODELS / "best_params.json", "w"), indent=2, default=str)
 best_params
 
 # %%
-fig, axes = plt.subplots(1, len(studies), figsize=(18, 3.2), sharey=True)
+fig, axes = plt.subplots(1, len(studies), figsize=(20, 3.2), sharey=True)
 for ax, (name, st) in zip(axes, studies.items()):
     v = [t.value for t in st.trials]
     ax.plot(v, "o", ms=3, alpha=.5, color="#5c7080"); ax.plot(np.maximum.accumulate(v), color="#b23a48", lw=2)
@@ -483,89 +520,51 @@ axes[0].set_ylabel("CV PR-AUC"); fig.suptitle("Optuna search history (red = best
 savefig("tuning_history"); plt.show()
 
 # %%
-imp_rows = []
-for name in ["XGBoost", "LightGBM", "CatBoost"]:
-    try:
-        imp = optuna.importance.get_param_importances(studies[name])
-        imp_rows += [{"model": name, "hyperparameter": k, "importance": v} for k, v in list(imp.items())[:5]]
-    except Exception as e:
-        print(name, e)
-display(pd.DataFrame(imp_rows).round(3))
+try:
+    imp = optuna.importance.get_param_importances(studies["EBM (new algorithm)"])
+    display(pd.Series(imp).round(3).to_frame("importance for EBM CV PR-AUC"))
+except Exception as e:
+    print(e)
 
 # %% [markdown]
-# ## 10. Tuned models + time-series stacking ensemble
+# ## 11. Tuned models: cross-validated comparison and decision thresholds
 
 # %%
 for name, m in tuned.items():
     p, s = cv_oof(m); oof_store[name] = p
     cv_rows.append({"model": name, "stage": "tuned", "CV PR-AUC": s.mean(), "CV PR-AUC sd": s.std(), "F1 @0.5": f1_score(y_oof, p >= .5)})
-
-# Stacking: meta logistic regression on base-model out-of-fold probabilities.
-# To score it honestly, the meta-learner for year Y is trained only on OOF predictions from years < Y.
-stack_bases = ["Random Forest", "XGBoost", "LightGBM", "CatBoost"]
-Z = np.column_stack([TimeSeriesStack._logit(oof_store[n]) for n in stack_bases])
-p_stack = np.full(len(y_oof), np.nan)
-for y in range(2020, 2024):
-    tr, va = fold_year < y, fold_year == y
-    p_stack[va] = LogisticRegression(max_iter=1000).fit(Z[tr], y_oof[tr]).predict_proba(Z[va])[:, 1]
-m20 = fold_year >= 2020
-cv_rows.append({"model": "Stacking (RF+XGB+LGBM+Cat → LR)", "stage": "tuned",
-                "CV PR-AUC": np.mean([average_precision_score(y_oof[fold_year == y], p_stack[fold_year == y]) for y in range(2020, 2024)]),
-                "CV PR-AUC sd": np.std([average_precision_score(y_oof[fold_year == y], p_stack[fold_year == y]) for y in range(2020, 2024)]),
-                "F1 @0.5": f1_score(y_oof[m20], p_stack[m20] >= .5)})
-oof_store["Stacking (RF+XGB+LGBM+Cat → LR)"] = p_stack
-
-# fair comparison on identical folds (2020–2023), because the stack needs 2019 to train its meta-learner
-def cv_2020plus(p):
-    return np.mean([average_precision_score(y_oof[fold_year == y], p[fold_year == y]) for y in range(2020, 2024)])
-
 cv_tbl = pd.DataFrame(cv_rows)
-cv_tbl["CV PR-AUC (2020–23 folds)"] = [cv_2020plus(oof_store[m]) if (m in oof_store and s != "default") else np.nan for m, s in zip(cv_tbl["model"], cv_tbl["stage"])]
 display(cv_tbl.round(4))
 
-# %% [markdown]
-# ### 10.1 Default vs tuned
-
-# %%
-dvt = cv_tbl[cv_tbl["stage"].isin(["default", "tuned"]) & cv_tbl["model"].isin(default_models)].pivot(index="model", columns="stage", values="CV PR-AUC")
+dvt = cv_tbl[cv_tbl["stage"].isin(["default", "tuned"])].pivot(index="model", columns="stage", values="CV PR-AUC")
 dvt["gain"] = dvt["tuned"] - dvt["default"]
-display(dvt.round(4))
-ax = dvt[["default", "tuned"]].plot.barh(figsize=(8, 3.5), color=["#bfc9d1", "#b23a48"])
+display(dvt.sort_values("tuned", ascending=False).round(4))
+ax = dvt.sort_values("tuned")[["default", "tuned"]].plot.barh(figsize=(8, 4), color=["#bfc9d1", "#b23a48"])
 ax.set_xlim(dvt[["default", "tuned"]].values.min() - .03, dvt[["default", "tuned"]].values.max() + .01)
 ax.set_xlabel("CV PR-AUC"); ax.set_title("Effect of hyperparameter tuning"); savefig("default_vs_tuned"); plt.show()
 
 # %% [markdown]
-# ### 10.2 Decision thresholds and model selection
-# Each model's decision threshold is set to the value that **maximises F1 on its pooled out-of-fold CV predictions**. The test set is never used for this.
-#
-# **Selection rule (fixed before looking at the test set):** pick the model with the highest CV PR-AUC on the shared 2020–23 folds. If the stacking ensemble beats the best single model by **less than 0.005**, prefer the single model, because it's simpler, faster to serve and gets exact TreeSHAP explanations.
+# Each model's decision threshold maximises **F1 on its pooled out-of-fold CV predictions**. The test set is never used for this.
+# The **proposed model is the EBM**, chosen for the reasons in §8. The standard models answer one question: *does choosing an interpretable model cost accuracy here?*
 
 # %%
-cands = ["Logistic Regression", "Random Forest", "XGBoost", "LightGBM", "CatBoost", "Stacking (RF+XGB+LGBM+Cat → LR)"]
-thresholds = {}
-for n in cands:
-    p = oof_store[n]; mask = ~np.isnan(p)
-    thresholds[n] = best_threshold(y_oof[mask], p[mask])
+SELECTED = "EBM (new algorithm)"
+cands = list(tuned)
+thresholds = {n: best_threshold(y_oof, oof_store[n]) for n in cands}
 thresholds["Persistence (next = now)"] = 0.5
 thresholds["Seasonal naive (last year)"] = 0.5
-
-sel = cv_tbl[(cv_tbl["stage"] == "tuned")].set_index("model")["CV PR-AUC (2020–23 folds)"]
-best_single = sel.drop("Stacking (RF+XGB+LGBM+Cat → LR)").idxmax()
-stack_gain = sel["Stacking (RF+XGB+LGBM+Cat → LR)"] - sel[best_single]
-SELECTED = "Stacking (RF+XGB+LGBM+Cat → LR)" if stack_gain >= 0.005 else best_single
-print(sel.sort_values(ascending=False).round(4).to_string())
-print(f"\nBest single model: {best_single} | stacking gain = {stack_gain:+.4f}")
-print(f"SELECTED MODEL: {SELECTED}  (decision threshold = {thresholds[SELECTED]:.2f})")
+cv_rank = cv_tbl[cv_tbl["stage"] == "tuned"].set_index("model")["CV PR-AUC"].sort_values(ascending=False)
+print(cv_rank.round(4).to_string())
+print(f"\nEBM rank by CV PR-AUC: {list(cv_rank.index).index(SELECTED) + 1} of {len(cv_rank)} | gap to best standard model: "
+      f"{cv_rank[SELECTED] - cv_rank.drop(SELECTED).max():+.4f} | decision threshold = {thresholds[SELECTED]:.2f}")
 
 # %% [markdown]
-# ## 11. Final evaluation on the untouched test set (Jan 2024 – May 2026)
+# ## 12. Final evaluation on the untouched test set (Jan 2024 – May 2026)
 # All tuned models are refit on the full development set (2007–2023) and scored **once** on the test period.
 
 # %%
-final_models = {n: clone(tuned[n]).fit(X_dev, y_dev) for n in ["Logistic Regression", "Random Forest", "XGBoost", "LightGBM", "CatBoost"]}
-final_models["Stacking (RF+XGB+LGBM+Cat → LR)"] = TimeSeriesStack({n: tuned[n] for n in stack_bases}, folds).fit(X_dev, y_dev)
+final_models = {n: clone(tuned[n]).fit(X_dev, y_dev) for n in cands}
 final_models["Persistence (next = now)"] = PersistenceBaseline().fit(X_dev, y_dev)
-
 test_pred = {n: m.predict_proba(X_test)[:, 1] for n, m in final_models.items()}
 test_pred["Seasonal naive (last year)"] = (X_test["rel_same_week_last_year"].values > 0).astype(float)
 
@@ -587,15 +586,18 @@ for _ in range(500):
 ci = pd.DataFrame({n: {"PR-AUC 95% CI": f"{np.percentile([b[0] for b in v], 2.5):.3f} – {np.percentile([b[0] for b in v], 97.5):.3f}",
                        "F1 95% CI": f"{np.percentile([b[1] for b in v], 2.5):.3f} – {np.percentile([b[1] for b in v], 97.5):.3f}"} for n, v in boot.items()}).T
 sel_boot = np.array(boot[SELECTED]); per_boot = np.array(boot["Persistence (next = now)"])
-print(f"P(selected F1 > persistence F1) over bootstrap = {(sel_boot[:,1] > per_boot[:,1]).mean():.3f}")
+print(f"P(EBM F1 > persistence F1) over bootstrap = {(sel_boot[:,1] > per_boot[:,1]).mean():.3f}")
+best_std = res.drop(index=[SELECTED, "Persistence (next = now)", "Seasonal naive (last year)"])["PR-AUC"].idxmax()
+std_boot = np.array(boot[best_std])
+print(f"P(EBM PR-AUC > {best_std} PR-AUC) over bootstrap = {(sel_boot[:,0] > std_boot[:,0]).mean():.3f}")
 display(ci)
 
 # %%
 fig, axes = plt.subplots(1, 2, figsize=(13, 5))
-pal = dict(zip(cands, ["#9aa5b1", "#6a994e", "#2a6f97", "#e0a458", "#7b2cbf", "#b23a48"]))
+pal = dict(zip(cands, ["#b23a48", "#9aa5b1", "#bc6c25", "#6a994e", "#2a6f97", "#7b2cbf"]))
 for n in cands:
     fpr, tpr, _ = roc_curve(y_test, test_pred[n]); pr, rc, _ = precision_recall_curve(y_test, test_pred[n])
-    lw = 2.8 if n == SELECTED else 1.3
+    lw = 3 if n == SELECTED else 1.2
     axes[0].plot(fpr, tpr, lw=lw, color=pal[n], label=f"{n} ({roc_auc_score(y_test, test_pred[n]):.3f})")
     axes[1].plot(rc, pr, lw=lw, color=pal[n], label=f"{n} ({average_precision_score(y_test, test_pred[n]):.3f})")
 pp = test_pred["Persistence (next = now)"]
@@ -609,12 +611,13 @@ savefig("test_roc_pr"); plt.show()
 best_model = final_models[SELECTED]; p_best = test_pred[SELECTED]; thr_best = thresholds[SELECTED]
 fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
 ConfusionMatrixDisplay(confusion_matrix(y_test, p_best >= thr_best), display_labels=["normal", "high risk"]).plot(ax=axes[0], cmap="Reds", colorbar=False)
-axes[0].set_title(f"{SELECTED} – confusion matrix (thr={thr_best:.2f})")
-for n in [SELECTED, "Logistic Regression"]:
+axes[0].set_title(f"EBM – confusion matrix (thr={thr_best:.2f})")
+for n in [SELECTED, best_std]:
     fp, mp = calibration_curve(y_test, test_pred[n], n_bins=10, strategy="quantile")
     axes[1].plot(mp, fp, "o-", label=n, color=pal[n])
 axes[1].plot([0, 1], [0, 1], ":", c="grey"); axes[1].set(xlabel="mean predicted probability", ylabel="observed frequency", title="Calibration – test set"); axes[1].legend(fontsize=8)
 savefig("test_confusion_calibration"); plt.show()
+cm = confusion_matrix(y_test, p_best >= thr_best); print("TN, FP, FN, TP =", cm.ravel())
 
 # %%
 test_eval = test.assign(p=p_best, pred=(p_best >= thr_best).astype(int))
@@ -626,7 +629,7 @@ per_d = test_eval.groupby("district").apply(lambda g: pd.Series({
 fig, ax = plt.subplots(figsize=(9, 7))
 ax.barh(per_d.index, per_d["Accuracy"], color="#bfc9d1", label="accuracy")
 ax.barh(per_d.index, per_d["F1"], color="#b23a48", height=.5, label="F1 (high-risk class)")
-ax.set_title(f"Per-district test performance – {SELECTED}"); ax.legend(loc="lower right")
+ax.set_title("Per-district test performance – EBM"); ax.legend(loc="lower right")
 savefig("test_per_district"); plt.show()
 display(per_d.round(2).T)
 
@@ -636,122 +639,119 @@ for ax, d in zip(axes, ["Colombo", "Kandy", "Batticaloa"]):
     g = test_eval[test_eval["district"] == d]
     ax.bar(g["target_date"], g["target_cases"], width=5, color=np.where(g["high_risk"] == 1, "#e8a0a8", "#c9d3dc"), label="actual cases in target week")
     ax.axhline(g["threshold"].iloc[0], c="k", ls="--", lw=1, label="district threshold")
-    ax2 = ax.twinx(); ax2.plot(g["target_date"], g["p"], c="#b23a48", lw=2, label="predicted P(high risk), made 2 weeks earlier")
+    ax2 = ax.twinx(); ax2.plot(g["target_date"], g["p"], c="#b23a48", lw=2, label="EBM P(high risk), made 2 weeks earlier")
     ax2.axhline(thr_best, c="#b23a48", ls=":", lw=1); ax2.set_ylim(0, 1); ax2.set_ylabel("probability")
     ax.set_title(d); ax.set_ylabel("cases")
     if d == "Colombo":
         h1, l1 = ax.get_legend_handles_labels(); h2, l2 = ax2.get_legend_handles_labels(); ax.legend(h1 + h2, l1 + l2, fontsize=8, loc="upper left")
-fig.suptitle("Two-week-ahead forecasts on the test period", y=1.0); fig.tight_layout(); savefig("test_timelines"); plt.show()
+fig.suptitle("Two-week-ahead EBM forecasts on the test period", y=1.0); fig.tight_layout(); savefig("test_timelines"); plt.show()
 
 # %% [markdown]
-# ### 11.1 Why LightGBM?
-#
-# **Selection followed the rule fixed before testing.** LightGBM had the highest cross-validated PR-AUC on the shared 2020–23 folds (0.752). The stacking ensemble didn't beat it (−0.003), so the single model was kept. On the test set (Jan 2024 – May 2026) it scores:
-#
-# | | ROC-AUC | PR-AUC | F1 | Precision | Recall | Bal. acc. |
-# |---|---|---|---|---|---|---|
-# | **LightGBM (selected)** | **0.877** | **0.791** | **0.724** | 0.656 | **0.807** | **0.792** |
-# | Persistence baseline | 0.772 | 0.592 | 0.700 | 0.695 | 0.706 | 0.772 |
-# | Seasonal naive | 0.585 | 0.394 | 0.472 | 0.442 | 0.506 | 0.585 |
-#
-# **Why it's a suitable model for this problem**
-# 1. **It clearly beats the strongest naive rule.** Persistence ("next is like now") is a tough baseline because dengue is autocorrelated. LightGBM improves PR-AUC by 0.20, with 95% bootstrap intervals that don't overlap (0.753–0.827 vs 0.547–0.635). It also raises **recall from 71% to 81%**, so about one in three outbreak weeks that persistence misses is now caught two weeks ahead. In 99.6% of bootstrap resamples its F1 is higher.
-# 2. **It ranks risk well** (ROC-AUC 0.88), so health officials can prioritise districts by probability instead of relying on a yes/no flag.
-# 3. **It suits small, noisy, shifting data.** The tuned model is very constrained: 4 leaves per tree, at least 206 samples per leaf and a low learning rate. That's a smooth, low-variance model, which matters when the positive rate swings between 7% and 82% from year to year.
-# 4. **It's practical.** It trains in seconds, the saved file is 0.3 MB, and exact TreeSHAP explanations work in the app.
-#
-# **Honest caveats**
-# * On the test set, CatBoost (PR-AUC 0.813) and the stacking ensemble (0.816) score slightly higher than LightGBM. Every tree model's 95% interval overlaps with the others, so their performance is statistically indistinguishable. Switching to the test winner now would be **selection on the test set**, so the pre-registered choice stands. The model comparison was decided by cross-validation and the test set only confirms generalisation.
-# * LightGBM was tuned with `scale_pos_weight ≈ 2.8`, so its **probabilities are inflated** (calibration plot: predicted 0.6 corresponds to roughly 0.4 observed). This doesn't affect ranking, and the CV-chosen decision threshold of 0.59 compensates. If calibrated probabilities were needed, isotonic calibration on the validation years would be the next step. Logistic regression is the best-calibrated model.
-# * Performance is lower in districts where high weeks are rare (Vavuniya, Kurunegala, Mullaitivu: F1 0.2–0.5). There, a few cases either way crosses the threshold. It's best in large, high-burden districts (Gampaha F1 0.90, Monaragala 0.88, Galle 0.83).
+# ### 12.1 What the results show
+# *(interpretation written after the results above)*
 
 # %% [markdown]
-# ### 11.2 LightGBM: the new algorithm and how it differs from standard models
+# ## 13. Explainability
+# EBM is interpretable by design, so explanations come from **three independent angles**:
+# 1. **EBM's own glass-box explanations:** global term importance, the learned shape functions (equivalent to exact partial-dependence curves), interaction heat maps, and exact local contributions.
+# 2. **SHAP:** model-agnostic Shapley values (permutation explainer).
+# 3. **LIME:** local surrogate models.
 #
-# **What it is.** LightGBM (*Light Gradient Boosting Machine*; Ke et al., NeurIPS 2017, Microsoft) is a gradient-boosted decision-tree algorithm. It builds trees **one after another**, and each new tree is fitted to the **gradient of the loss** (the remaining errors) of the ensemble so far. The final prediction is the sum of all trees, passed through a sigmoid to give a probability.
-#
-# **What makes it different from other boosting libraries:**
-# * **Histogram-based splitting:** each feature is bucketed into at most 255 bins, so finding a split means scanning bins rather than every value. Training is much faster and uses less memory.
-# * **Leaf-wise (best-first) growth:** it always splits the leaf that reduces the loss most, instead of growing a whole level at a time like XGBoost or classic trees. This is more accurate per tree, which is why `num_leaves` and `min_child_samples` must be tuned to control overfitting.
-# * **GOSS and EFB:** gradient-based one-side sampling (keep rows with large errors, sample the rest) and exclusive feature bundling. Both are built-in speed-ups for large data. Here row bagging (`subsample`) was used instead of GOSS.
-#
-# | | Decision tree | Logistic regression | k-NN | Random Forest | **LightGBM** |
-# |---|---|---|---|---|---|
-# | Model | one tree | linear in features | stores training data | many deep trees, averaged | many small trees, **added sequentially** |
-# | Learns by | greedy splits | maximum likelihood | none (lazy) | bagging + random features | **gradient descent in function space** |
-# | Non-linear thresholds | yes | no (unless engineered) | yes | yes | yes |
-# | Feature interactions | yes | no | implicit | yes | yes, controlled by tree size |
-# | Needs scaling | no | yes | yes (distance-based) | no | no |
-# | Class imbalance | weights | weights | poor | weights | `scale_pos_weight`, tuned |
-# | Variance / overfitting | high | low | depends on k | low | low with tuning (shrinkage, leaf limits) |
-# | Speed on 20k rows | fast | fast | slow to predict | moderate | **very fast** (histograms) |
-#
-# **Why it suits this problem**
-# 1. The EDA showed **threshold-like, non-linear effects**. Risk jumps once a district nears its threshold, which SHAP confirms in §12 (the S-curve). Linear models and k-NN capture this poorly.
-# 2. **Interactions** matter: the same case level means more risk before the monsoon peak and during a national wave.
-# 3. Features are **strongly collinear** (lags and moving averages) and on different scales. Trees don't care about either.
-# 4. **Imbalanced, shifting classes:** the positive rate goes from 7% to 82% between years. `scale_pos_weight` plus a CV-chosen threshold handles this.
-# 5. **Speed:** 30 Optuna trials × 5 time-series folds take under 2 minutes, compared with about 10 minutes for Random Forest.
-# 6. **Exact explanations** with TreeSHAP, both in the notebook and live in the app.
-#
-# **What tuning chose.** `num_leaves = 4`, `min_child_samples = 206`, `learning_rate ≈ 0.010` with 500 trees, `colsample_bytree ≈ 0.53`, `scale_pos_weight ≈ 2.8`. That's **many tiny trees with heavy shrinkage**, close to an additive model with a few pairwise interactions. It's a low-variance configuration that generalises across epidemic and non-epidemic years, consistent with LightGBM having the best cross-validated PR-AUC.
-
-# %% [markdown]
-# ## 12. Explainability
-# ### 12.1 SHAP (global and local)
+# ### 13.1 Glass-box explanations from the EBM
 
 # %%
-# The model we explain: the selected one if it's a tree model; if the stack was selected we explain its strongest base learner
-# with exact TreeSHAP and confirm with a model-agnostic permutation SHAP on the full stack.
-explain_name = SELECTED if SELECTED != "Stacking (RF+XGB+LGBM+Cat → LR)" else best_single
-explain_model = final_models[explain_name]
-X_shap = X_test.sample(1500, random_state=SEED)
-explainer = shap.TreeExplainer(explain_model)
+term_names = list(best_model.term_names_)
+term_imp = pd.Series(best_model.term_importances(), index=term_names).sort_values(ascending=False)
+fig, ax = plt.subplots(figsize=(8, 7))
+top = term_imp.head(18)[::-1]
+ax.barh(top.index, top.values, color=["#2a6f97" if " & " in t else "#b23a48" for t in top.index])
+ax.set_xlabel("mean |contribution| (log-odds)"); ax.set_title("EBM global term importance (red = single feature, blue = interaction)")
+savefig("ebm_importance"); plt.show()
+print(f"{len(term_names)} terms: {sum(' & ' not in t for t in term_names)} single-feature shape functions + {sum(' & ' in t for t in term_names)} pairwise interactions")
+display(term_imp.head(10).round(3).to_frame("importance"))
+
+# %%
+# Shape functions of the most important single features (exact partial dependence of the model, with bagging error bands)
+glob = best_model.explain_global()
+singles = [t for t in term_imp.index if " & " not in t][:4]
+fig, axes = plt.subplots(1, 4, figsize=(18, 3.8))
+for ax, t in zip(axes, singles):
+    d = glob.data(term_names.index(t))
+    edges = np.asarray(d["names"], dtype=float); sc = np.asarray(d["scores"], dtype=float)
+    lo, hi = np.asarray(d.get("lower_bounds", sc), dtype=float), np.asarray(d.get("upper_bounds", sc), dtype=float)
+    ax.step(edges[:-1], sc, where="post", color="#b23a48", lw=2)
+    ax.fill_between(edges[:-1], lo, hi, step="post", color="#b23a48", alpha=.15)
+    ax.axhline(0, c="grey", lw=.8); ax.set_title(FEATURE_DESCRIPTIONS.get(t, t), fontsize=9); ax.set_xlabel(t)
+axes[0].set_ylabel("contribution to log-odds")
+plt.tight_layout(); savefig("ebm_shape_functions"); plt.show()
+
+# %%
+# The strongest interaction as a heat map
+pairs = [t for t in term_imp.index if " & " in t]
+if pairs:
+    t = pairs[0]; d = glob.data(term_names.index(t))
+    fig, ax = plt.subplots(figsize=(7, 5))
+    sc = np.asarray(d["scores"], dtype=float)
+    lim = np.abs(sc).max()
+    im = ax.imshow(sc.T, origin="lower", aspect="auto", cmap="RdBu_r", vmin=-lim, vmax=lim)
+    a, b = t.split(" & ")
+    ax.set_xlabel(f"{a} (bin)"); ax.set_ylabel(f"{b} (bin)"); ax.set_title(f"EBM interaction: {t}")
+    plt.colorbar(im, label="contribution to log-odds"); savefig("ebm_interaction"); plt.show()
+
+# %%
+# Exact local explanation for the hold-out point: intercept + term contributions = model log-odds
+X_ho = holdout[FEATURES]
+contrib = pd.Series(best_model.eval_terms(X_ho)[0], index=term_names)
+intercept = float(np.atleast_1d(best_model.intercept_)[0])
+logit = intercept + contrib.sum(); p_check = 1 / (1 + np.exp(-logit))
+print(f"intercept {intercept:+.3f} + sum of contributions {contrib.sum():+.3f} = {logit:+.3f} log-odds -> P = {p_check:.3f} "
+      f"(model.predict_proba = {best_model.predict_proba(X_ho)[0, 1]:.3f})")
+top_c = contrib.reindex(contrib.abs().sort_values(ascending=False).index).head(12)[::-1]
+fig, ax = plt.subplots(figsize=(9, 5))
+ax.barh(top_c.index, top_c.values, color=["#b23a48" if v > 0 else "#2a6f97" for v in top_c.values])
+ax.axvline(0, c="grey", lw=.8); ax.set_xlabel("contribution to log-odds")
+ax.set_title(f"EBM local explanation – hold-out point: {holdout['district'].iloc[0]}, week of {holdout['date'].iloc[0].date()} (P = {p_check:.2f})")
+savefig("ebm_local_holdout"); plt.show()
+
+# %% [markdown]
+# ### 13.2 SHAP (model-agnostic Shapley values)
+
+# %%
+bg = shap.sample(X_dev, 100, random_state=SEED)
+def f_logit(X):
+    p = np.clip(best_model.predict_proba(pd.DataFrame(X, columns=FEATURES))[:, 1], 1e-6, 1 - 1e-6)
+    return np.log(p / (1 - p))
+explainer = shap.PermutationExplainer(f_logit, bg)
+X_shap = X_test.sample(400, random_state=SEED)
 sv = explainer(X_shap)
-if sv.values.ndim == 3:   # (n, features, classes) for some tree models -> keep positive class
-    sv = sv[:, :, 1]
-SHAP_UNIT = "probability" if isinstance(explain_model, RandomForestClassifier) else "log-odds"
-print("Explained model:", explain_name, f"| SHAP values are in {SHAP_UNIT} units of 'high risk'")
+shap.plots.beeswarm(sv, max_display=19, show=False); plt.title("SHAP summary – EBM (log-odds)"); savefig("shap_beeswarm"); plt.show()
 
 # %%
-shap.plots.beeswarm(sv, max_display=19, show=False); plt.title(f"SHAP summary – {explain_name}"); savefig("shap_beeswarm"); plt.show()
-
-# %%
-shap.plots.bar(sv, max_display=19, show=False); plt.title("Mean |SHAP| – global feature importance"); savefig("shap_bar"); plt.show()
 shap_imp = pd.Series(np.abs(sv.values).mean(0), index=FEATURES).sort_values(ascending=False)
-display(shap_imp.round(3).to_frame("mean |SHAP|").T)
-
-# %%
-top3 = shap_imp.index[:3].tolist()
+# EBM's own importance per *feature* (single term + half of each interaction it belongs to)
+ebm_feat = pd.Series(0.0, index=FEATURES)
+for t, v in term_imp.items():
+    parts = t.split(" & ")
+    for p in parts:
+        ebm_feat[p] += v / len(parts)
+cmp_imp = pd.DataFrame({"SHAP mean |value|": shap_imp, "EBM importance": ebm_feat}).sort_values("SHAP mean |value|", ascending=False)
+print("Spearman rank correlation, SHAP vs EBM feature importance:", round(cmp_imp.corr(method="spearman").iloc[0, 1], 3))
+display(cmp_imp.round(3).head(10))
 fig, axes = plt.subplots(1, 3, figsize=(16, 4.2))
-for ax, f in zip(axes, top3):
-    shap.plots.scatter(sv[:, f], color=sv[:, "target_week_cos" if f != "target_week_cos" else "rel_now"], ax=ax, show=False)
-    ax.set_title(FEATURE_DESCRIPTIONS[f], fontsize=9)
+for ax, f in zip(axes, shap_imp.index[:3]):
+    shap.plots.scatter(sv[:, f], ax=ax, show=False); ax.set_title(FEATURE_DESCRIPTIONS[f], fontsize=9)
 plt.tight_layout(); savefig("shap_dependence"); plt.show()
 
 # %%
-# local explanation for the hold-out data point
-X_ho = holdout[FEATURES]
 sv_ho = explainer(X_ho)
-if sv_ho.values.ndim == 3: sv_ho = sv_ho[:, :, 1]
 shap.plots.waterfall(sv_ho[0], max_display=12, show=False)
 plt.title(f"SHAP waterfall – hold-out point: {holdout['district'].iloc[0]}, week of {holdout['date'].iloc[0].date()}")
 savefig("shap_waterfall_holdout"); plt.show()
 
-# %%
-if SELECTED == "Stacking (RF+XGB+LGBM+Cat → LR)":
-    bg = shap.sample(X_dev, 100, random_state=SEED)
-    perm = shap.PermutationExplainer(lambda X: best_model.predict_proba(pd.DataFrame(X, columns=FEATURES))[:, 1], bg)
-    sv_stack = perm(X_test.sample(300, random_state=SEED))
-    stack_imp = pd.Series(np.abs(sv_stack.values).mean(0), index=FEATURES)
-    print("Spearman rank correlation of importances (stack vs base learner):",
-          round(stack_imp.rank().corr(shap_imp.reindex(FEATURES).rank()), 3))
-    shap.plots.bar(sv_stack, max_display=12, show=False); plt.title("Permutation SHAP – full stacking ensemble"); plt.show()
-
 # %% [markdown]
-# ### 12.2 LIME (local surrogate explanations)
-# LIME perturbs one instance, queries the model, and fits a weighted linear model around that point. We apply it to
-# (a) the hold-out point, (b) a correctly predicted outbreak onset, and (c) a missed outbreak, and we check how stable it is across random seeds.
+# ### 13.3 LIME (local surrogate explanations)
+# LIME perturbs one instance, queries the model, and fits a weighted linear model around that point. It's applied to
+# (a) the hold-out point, (b) a correctly predicted outbreak onset, and (c) a missed outbreak, with a stability check across random seeds.
 
 # %%
 predict_fn = lambda X: best_model.predict_proba(pd.DataFrame(X, columns=FEATURES))
@@ -778,7 +778,6 @@ for ax, (lab, row) in zip(axes, cases_lime.items()):
 plt.tight_layout(); savefig("lime_cases"); plt.show()
 
 # %%
-# LIME stability: repeat for 5 seeds and compare the top-5 features selected
 tops = []
 for s in range(5):
     le = lime.lime_tabular.LimeTabularExplainer(X_dev.values, feature_names=FEATURES, class_names=["normal", "high risk"],
@@ -789,39 +788,31 @@ print("Top-5 LIME features per seed:"); [print(" ", t) for t in tops]
 print("Features in all 5 runs:", sorted(set.intersection(*map(set, tops))))
 
 # %%
-# SHAP vs LIME agreement on the hold-out point
+# Agreement of the three explanation methods on the hold-out point (per feature; interactions split equally)
+ebm_local = pd.Series(0.0, index=FEATURES)
+for t, v in contrib.items():
+    parts = t.split(" & ")
+    for p in parts:
+        ebm_local[p] += v / len(parts)
 lime_w = pd.Series({FEATURES[i]: w for i, w in e_ho.as_map()[1]})
-shap_w = pd.Series(sv_ho.values[0], index=FEATURES)
-cmp = pd.DataFrame({"SHAP": shap_w, "LIME weight": lime_w}).dropna().sort_values("SHAP", key=abs, ascending=False)
-cmp["same sign"] = np.sign(cmp["SHAP"]) == np.sign(cmp["LIME weight"])
-display(cmp.round(3))
-print(f"Sign agreement on LIME's top-10 features: {cmp['same sign'].mean():.0%}")
+agree = pd.DataFrame({"EBM exact": ebm_local, "SHAP": pd.Series(sv_ho.values[0], index=FEATURES), "LIME": lime_w}).dropna()
+agree = agree.reindex(agree["EBM exact"].abs().sort_values(ascending=False).index)
+agree["EBM–SHAP same sign"] = np.sign(agree["EBM exact"]) == np.sign(agree["SHAP"])
+agree["EBM–LIME same sign"] = np.sign(agree["EBM exact"]) == np.sign(agree["LIME"])
+display(agree.round(3))
+print(f"Sign agreement on LIME's top-10 features: EBM–SHAP {agree['EBM–SHAP same sign'].mean():.0%}, EBM–LIME {agree['EBM–LIME same sign'].mean():.0%}")
 
 # %% [markdown]
-# ### 12.3 Interpreting the model (SHAP + LIME)
-#
-# **Global picture (SHAP beeswarm and bar).** The model works like an epidemiologist's rule of thumb, but with calibrated weights:
-# 1. **`rel_now` and `rel_ma4`** (where this week and the last month sit relative to the district threshold) are by far the strongest drivers, with mean |SHAP| ≈ 0.6 log-odds each.
-#    The dependence plots show an **S-shaped response**. Below about −1 (cases under 40% of threshold) the push is a flat −0.5. It rises steeply between −0.5 and +1 and saturates once a district is clearly above threshold. The model has learned that **the zone just below the threshold is where the forecast is decided**.
-# 2. **`share_districts_high`** is third. When more than half of Sri Lanka's districts are already above their thresholds, every district's risk rises (+0.4 to +0.8 log-odds). This captures **nationwide epidemic waves** like 2017, 2019 and 2023, which a single-district view can't see.
-# 3. **`rel_lag1`, `national_growth_4w` and `seasonal_norm`** add momentum and seasonality. A rising national trend and a target week that is usually high (June–July after the SW monsoon, and December–January) both raise the risk.
-# 4. **`district_baseline` and `rel_same_week_last_year` contribute almost nothing.** Once counts are scaled to each district's threshold, district size doesn't matter, and last year's level in the same week is a weak signal for this year. This is consistent with the seasonal-naive baseline doing poorly (PR-AUC 0.39).
-#
-# **Local explanations.**
-# * **Hold-out point (Colombo, week of 27 Apr 2026, 300 cases vs threshold 291).** Starting from the base rate (−1.18 log-odds, about 24%), the forecast is pushed up by cases being right at threshold (`rel_now` +0.67), a 4-week average at threshold (`rel_ma4` +0.65) and 46% of districts being high nationally (+0.23). The seasonal norm pulls it down slightly (−0.08), because late May isn't usually a peak for Colombo. Final P = 0.63, which is above the 0.59 threshold, so it's predicted HIGH. The actual count was 308 cases, so the prediction was ✔.
-# * **LIME agrees.** On the hold-out point, LIME's top features are the same four (`rel_now`, `rel_ma4`, `share_districts_high`, `rel_lag1`), with the same signs as SHAP on 8 of LIME's 10 features. The two disagreements are on features with near-zero weight in both methods. Across 5 random seeds, LIME's top 5 always contained the same 4 core features, so the local explanation is **stable**.
-# * **Correctly forecast onset (Nuwara Eliya, June 2025).** This week was below threshold, which pushes the risk down. The recent 4-week average and last week were already near threshold, more than 35% of districts were high, and the target week was in the SW-monsoon season, so the model raised an alert two weeks before the district crossed its threshold.
-# * **Missed outbreak (Monaragala, March 2024, P = 0.47).** The national trend was falling (`national_growth_4w` ≤ −0.30) and this week was below threshold, so the model leaned towards "normal". The actual count was 12 against a threshold of 11, just over the line. Many errors are borderline cases like this one, where one or two cases decide the label.
-#
-# **What this means in practice.** The model is transparent, and its logic is epidemiologically sensible: *recent level relative to normal, plus national momentum, plus season*. An MOH officer can read a SHAP waterfall and see why a district was flagged. The current gaps (no rainfall data, reporting noise) are visible in the explanations rather than hidden.
+# ### 13.4 Interpreting the model
+# *(discussion written after the results)*
 
 # %% [markdown]
-# ## 13. Save the model and run inference on the held-out data point
+# ## 14. Save the model and run inference on the held-out data point
 
 # %%
 bundle = {
     "model": best_model,
-    "model_name": SELECTED,
+    "model_name": "Explainable Boosting Machine (EBM)",
     "features": FEATURES,
     "feature_descriptions": FEATURE_DESCRIPTIONS,
     "decision_threshold": thr_best,
@@ -830,7 +821,7 @@ bundle = {
     "reference_years": REFERENCE_YEARS,
     "trained_on": f"{dev['date'].min().date()} to {dev['date'].max().date()} ({len(dev)} district-weeks)",
     "test_metrics": res.loc[SELECTED].drop("threshold").round(4).to_dict(),
-    "best_params": best_params.get(SELECTED, {n: best_params[n] for n in stack_bases} if "Stacking" in SELECTED else {}),
+    "best_params": best_params[SELECTED],
 }
 joblib.dump(bundle, MODELS / "dengue_model.pkl")
 meta = {k: v for k, v in bundle.items() if k not in ("model", "reference")}
@@ -851,7 +842,7 @@ print(f"P(high risk)       : {p_ho:.3f}  -> predicted {'HIGH RISK' if p_ho >= lo
 print(f"Actual outcome     : {int(r['target_cases'])} cases -> {'HIGH RISK' if r['high_risk'] == 1 else 'normal'}")
 
 # %% [markdown]
-# ## 14. Conclusions
+# ## 15. Conclusions
 #
 # **Summary.** Using 20 years of official Sri Lankan dengue surveillance data, I built a two-week-ahead early-warning classifier for all 26 RDHS areas.
 # After a careful EDA, three kinds of data problem were found and handled (a missing week, a year of zeros recorded instead of missing values for Monaragala, and 22 implausible or misaligned weekly values).
@@ -863,7 +854,7 @@ print(f"Actual outcome     : {int(r['target_cases'])} cases -> {'HIGH RISK' if r
 # * SHAP and LIME: §12 · Critical discussion (limitations, data quality, bias, ethics): §15 · Saved model and hold-out inference: §13 · App: `app/app.py` · MLOps: `src/train.py`, `tests/`, `.github/workflows/`
 
 # %% [markdown]
-# ## 15. Critical discussion
+# ## 16. Critical discussion
 #
 # **Limitations of the model**
 # * **No weather inputs.** District rainfall and temperature are known dengue drivers with a 2–8 week lag. They weren't available as an open district-weekly series, so seasonality and national momentum stand in for them.

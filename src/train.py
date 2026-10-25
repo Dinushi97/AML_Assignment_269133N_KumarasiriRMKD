@@ -29,12 +29,10 @@ from sklearn.metrics import (average_precision_score, balanced_accuracy_score, b
 
 from src.features import (FEATURE_DESCRIPTIONS, FEATURES, HORIZON, RAW_CSV, REFERENCE_YEARS, ROOT, build_features,
                           clean, fit_reference, load_raw, split, time_series_folds)
-from src.models import PersistenceBaseline, TimeSeriesStack, make_model
+from src.models import NEW_ALGORITHM, PersistenceBaseline, make_model
 from src.validate import validate_raw
 
 MODELS = ROOT / "models"
-STACK = "Stacking (RF+XGB+LGBM+Cat → LR)"
-STACK_BASES = ["Random Forest", "XGBoost", "LightGBM", "CatBoost"]
 
 
 def evaluate(y, p, thr):
@@ -44,9 +42,7 @@ def evaluate(y, p, thr):
             "balanced_accuracy": balanced_accuracy_score(y, yhat), "brier": brier_score_loss(y, p)}
 
 
-def build(name: str, params: dict, folds):
-    if name == STACK:
-        return TimeSeriesStack({n: make_model(n, params[n]) for n in STACK_BASES}, folds)
+def build(name: str, params: dict, folds=None):
     return make_model(name, params[name])
 
 
@@ -61,8 +57,8 @@ def main(argv=None):
 
     meta = json.load(open(MODELS / "model_metadata.json"))
     params = json.load(open(MODELS / "best_params.json"))
-    name = args.model or meta["model_name"]
-    thr = float(meta["decision_threshold"]) if name == meta["model_name"] else 0.5
+    name = args.model or NEW_ALGORITHM
+    thr = float(meta["decision_threshold"]) if name == NEW_ALGORITHM else 0.5
     t0 = time.time()
 
     # 1. validate
@@ -99,11 +95,11 @@ def main(argv=None):
             allf = feat.dropna(subset=FEATURES + ["high_risk"]).reset_index(drop=True)
             model = build(name, params, time_series_folds(allf, val_years=(2021, 2022, 2023, 2024, 2025))).fit(
                 allf[FEATURES], allf["high_risk"].astype(int).values)
-        bundle = {"model": model, "model_name": name, "features": FEATURES, "feature_descriptions": FEATURE_DESCRIPTIONS,
+        bundle = {"model": model, "model_name": "Explainable Boosting Machine (EBM)" if name == NEW_ALGORITHM else name, "features": FEATURES, "feature_descriptions": FEATURE_DESCRIPTIONS,
                   "decision_threshold": thr, "reference": ref, "horizon_weeks": HORIZON, "reference_years": REFERENCE_YEARS,
                   "trained_on": "all labelled weeks" if args.full else f"{dev['date'].min().date()} to {dev['date'].max().date()}",
                   "test_metrics": {k: round(v, 4) for k, v in m.items()}, "version": version, "data_sha256": data_hash,
-                  "best_params": params.get(name, {n: params[n] for n in STACK_BASES})}
+                  "best_params": params[name]}
         out = Path(args.out); out.parent.mkdir(parents=True, exist_ok=True)
         joblib.dump(bundle, out)
         df.to_csv(ROOT / "data" / "processed" / "dengue_weekly_clean.csv", index=False)  # history used by the app
