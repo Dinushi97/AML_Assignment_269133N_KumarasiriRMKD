@@ -185,7 +185,7 @@ Then open the app at **`https://<WEBAPP>.azurewebsites.net`**. The first start a
 
 | Symptom | Fix |
 |---|---|
-| `AADSTS70021` / "No matching federated identity record" | The `--subject` doesn't match. Check `GH_REPO` (exact case), that you pushed to `main`, and that both federated credentials exist: `az identity federated-credential list --identity-name id-github-dengue -g $RG -o table` |
+| `AADSTS700213` / `AADSTS70021` "No matching federated identity record" | GitHub may send the subject with IDs (`repo:Owner@ownerId/Repo@repoId:ref:refs/heads/main`). Re-run `bash scripts/setup_azure.sh` (it now registers both formats), or add a credential with the exact subject shown in the error. Otherwise:  The `--subject` doesn't match. Check `GH_REPO` (exact case), that you pushed to `main`, and that both federated credentials exist: `az identity federated-credential list --identity-name id-github-dengue -g $RG -o table` |
 | Region not allowed / `RequestDisallowedByAzure` | Use a region listed in the error (step 1 note) |
 | Compute quota error for `Standard_DS3_v2` | Edit `azure/compute.yml` → `size: Standard_DS2_v2` (or `Standard_D2as_v4`), then `az ml compute create --file azure/compute.yml` again |
 | Azure job **Failed** with "quality gate: FAILED" | Working as designed: the new model didn't beat the baseline, so nothing was deployed |

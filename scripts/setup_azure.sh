@@ -84,7 +84,17 @@ if [ -z "$(az role assignment list --assignee "$PRINCIPAL_ID" --scope "$SCOPE" -
     echo "  waiting for the identity to propagate…"; sleep 20
   done
 fi
-for cred in "github-main:repo:$GH_REPO:ref:refs/heads/main" "github-production:repo:$GH_REPO:environment:production"; do
+# GitHub may present the subject either by name or with immutable IDs (repo:Owner@ownerId/Repo@repoId:...); trust both
+CREDS="github-main:repo:$GH_REPO:ref:refs/heads/main github-production:repo:$GH_REPO:environment:production"
+if command -v gh >/dev/null && gh auth status >/dev/null 2>&1; then
+  OWNER_ID=$(gh api "repos/$GH_REPO" --jq .owner.id 2>/dev/null || true)
+  REPO_ID=$(gh api "repos/$GH_REPO" --jq .id 2>/dev/null || true)
+  if [ -n "$OWNER_ID" ] && [ -n "$REPO_ID" ]; then
+    ID_REPO="${GH_REPO%%/*}@$OWNER_ID/${GH_REPO#*/}@$REPO_ID"
+    CREDS="$CREDS github-main-ids:repo:$ID_REPO:ref:refs/heads/main github-production-ids:repo:$ID_REPO:environment:production"
+  fi
+fi
+for cred in $CREDS; do
   NAME=${cred%%:*}; SUBJECT=${cred#*:}
   az identity federated-credential show --name "$NAME" --identity-name "$IDENTITY" --resource-group "$RG" >/dev/null 2>&1 \
     || az identity federated-credential create --name "$NAME" --identity-name "$IDENTITY" --resource-group "$RG" \
