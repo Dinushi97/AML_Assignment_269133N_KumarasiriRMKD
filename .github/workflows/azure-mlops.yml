@@ -1,0 +1,145 @@
+name: Azure MLOps – test, train, register, deploy
+
+# Runs on every push to main that touches the model, data, app or Azure config,
+# every Tuesday after the weekly epidemiological report (continuous training),
+# or by hand from the Actions tab.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "app/**"
+      - "azure/**"
+      - "data/raw/**"
+      - "models/best_params.json"
+      - "models/model_metadata.json"
+      - "requirements.txt"
+      - ".github/workflows/azure-mlops.yml"
+  schedule:
+    - cron: "30 3 * * 2"   # Tuesday 09:00 Sri Lanka time
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # OIDC login to Azure (no passwords stored in GitHub)
+  contents: read
+
+env:
+  RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+  WORKSPACE: ${{ vars.AZURE_ML_WORKSPACE }}
+  MODEL_NAME: dengue-ews-lightgbm
+
+jobs:
+  # 1 ── unit tests: data validation, leakage, purged split, saved-model/app consistency
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - run: pytest -q
+
+  # 2 ── train in Azure ML, quality-gate, register the model
+  train:
+    needs: test
+    if: vars.AZURE_ML_WORKSPACE != ''   # skipped until the Azure setup (docs/azure-mlops-guide.md) is done
+    runs-on: ubuntu-latest
+    outputs:
+      job_name: ${{ steps.job.outputs.job_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC, managed identity)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install Azure ML CLI v2
+        run: |
+          az extension add --name ml --yes
+          az configure --defaults group="$RESOURCE_GROUP" workspace="$WORKSPACE"
+
+      - name: Fetch the latest Epidemiology Unit data (scheduled runs only)
+        if: github.event_name == 'schedule'
+        run: |
+          pip install pandas==3.0.5 pyreadr==0.5.8
+          python -m src.fetch_data
+
+      - name: Register data asset (version = content hash)
+        run: |
+          V=$(sha256sum data/raw/srilanka_weekly_dengue.csv | cut -c1-10)
+          az ml data show --name dengue-weekly --version "$V" >/dev/null 2>&1 \
+            || az ml data create --file azure/data-asset.yml --version "$V"
+          echo "data version $V"
+
+      - name: Register environment (version = hash of its definition)
+        run: |
+          V=$(cat azure/environment.yml azure/conda.yml | sha256sum | cut -c1-10)
+          az ml environment show --name dengue-train-env --version "$V" >/dev/null 2>&1 \
+            || az ml environment create --file azure/environment.yml --version "$V"
+
+      - name: Submit training job and wait
+        id: job
+        run: |
+          JOB=$(az ml job create --file azure/train-job.yml \
+                  --set tags.git_sha=${{ github.sha }} --query name -o tsv)
+          echo "job_name=$JOB" >> "$GITHUB_OUTPUT"
+          echo "Azure ML job: $JOB"
+          az ml job stream --name "$JOB" || true
+          STATUS=$(az ml job show --name "$JOB" --query status -o tsv)
+          echo "status: $STATUS"
+          # the job fails (exit 1) when the model does not beat the persistence baseline
+          [ "$STATUS" = "Completed" ] || { echo "::error::Training job $STATUS (quality gate failed or error)"; exit 1; }
+
+      - name: Register model in the Azure ML model registry
+        run: |
+          az ml model create --name "$MODEL_NAME" --type custom_model \
+            --path "azureml://jobs/${{ steps.job.outputs.job_name }}/outputs/model_dir" \
+            --description "Dengue early-warning LightGBM (2-week horizon)" \
+            --tags git_sha=${{ github.sha }} job=${{ steps.job.outputs.job_name }}
+
+  # 3 ── deploy the Streamlit app to Azure App Service with the newly registered model
+  deploy:
+    needs: train
+    if: vars.AZURE_WEBAPP_NAME != ''
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://${{ vars.AZURE_WEBAPP_NAME }}.azurewebsites.net
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Download the latest registered model
+        run: |
+          az extension add --name ml --yes
+          az configure --defaults group="$RESOURCE_GROUP" workspace="$WORKSPACE"
+          V=$(az ml model show --name "$MODEL_NAME" --label latest --query version -o tsv)
+          echo "deploying model version $V"
+          az ml model download --name "$MODEL_NAME" --version "$V" --download-path dl
+          cp "$(find dl -name dengue_model.pkl | head -1)" models/dengue_model.pkl
+          cp "$(find dl -name model_metadata.json | head -1)" models/model_metadata.json
+          cp "$(find dl -name dengue_weekly_clean.csv | head -1)" data/processed/dengue_weekly_clean.csv
+
+      - name: Build the app package
+        run: |
+          mkdir -p site/models site/data
+          cp -r app src reports .streamlit requirements.txt site/
+          cp models/dengue_model.pkl models/model_metadata.json site/models/
+          cp -r data/processed data/holdout_sample.csv site/data/
+          mkdir -p site/data/raw && cp data/raw/sl_province_districts.csv site/data/raw/
+
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.AZURE_WEBAPP_NAME }}
+          package: site

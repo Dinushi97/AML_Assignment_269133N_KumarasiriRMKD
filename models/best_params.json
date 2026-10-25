@@ -1,0 +1,48 @@
+{
+  "Logistic Regression": {
+    "C": 0.21846820048287902,
+    "l1_ratio": 0.0,
+    "class_weight": null
+  },
+  "Random Forest": {
+    "n_estimators": 400,
+    "max_depth": 6,
+    "min_samples_leaf": 13,
+    "max_features": 0.5,
+    "max_samples": 0.6707636611684187,
+    "class_weight": null
+  },
+  "XGBoost": {
+    "n_estimators": 400,
+    "learning_rate": 0.013103345931982171,
+    "max_depth": 4,
+    "min_child_weight": 3.018461061702051,
+    "subsample": 0.675684878296412,
+    "colsample_bytree": 0.7984024448667217,
+    "gamma": 0.8296159137938902,
+    "reg_lambda": 0.05563715584088754,
+    "reg_alpha": 0.3569778474811914,
+    "scale_pos_weight": 1.6275368744947503
+  },
+  "LightGBM": {
+    "n_estimators": 500,
+    "learning_rate": 0.01017647252942279,
+    "num_leaves": 4,
+    "max_depth": 8,
+    "min_child_samples": 206,
+    "subsample": 0.959425024012944,
+    "colsample_bytree": 0.5281062545257524,
+    "reg_lambda": 0.002271814736990715,
+    "reg_alpha": 0.0049949387914562625,
+    "scale_pos_weight": 2.8403707315832047
+  },
+  "CatBoost": {
+    "iterations": 600,
+    "learning_rate": 0.023634327950337607,
+    "depth": 6,
+    "l2_leaf_reg": 5.52944333873064,
+    "random_strength": 0.1346305180807154,
+    "bagging_temperature": 0.5443463402870634,
+    "auto_class_weights": "Balanced"
+  }
+}

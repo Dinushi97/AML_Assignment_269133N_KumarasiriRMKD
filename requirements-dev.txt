@@ -1,0 +1,11 @@
+# training, notebook, explainability, MLOps and tests
+-r requirements.txt
+optuna==5.0.0
+lime==0.2.0.1
+seaborn==0.13.2
+mlflow==3.17.2
+pyreadr==0.5.8
+jupytext==1.19.6
+jupyter
+nbconvert
+pytest==9.1.1

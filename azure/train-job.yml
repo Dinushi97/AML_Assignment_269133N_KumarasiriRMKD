@@ -1,0 +1,20 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
+display_name: dengue-ews-train
+experiment_name: dengue-early-warning
+description: Validate data -> features -> train LightGBM with tuned params -> evaluate vs persistence -> quality gate
+code: ..
+command: >-
+  python -m src.train
+  --data ${{inputs.raw_data}}
+  --out ${{outputs.model_dir}}/dengue_model.pkl
+inputs:
+  raw_data:
+    type: uri_file
+    path: azureml:dengue-weekly@latest
+outputs:
+  model_dir:
+    type: uri_folder
+environment: azureml:dengue-train-env@latest
+compute: azureml:cpu-cluster
+tags:
+  project: dengue-early-warning

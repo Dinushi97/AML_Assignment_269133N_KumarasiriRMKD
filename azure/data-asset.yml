@@ -1,0 +1,5 @@
+$schema: https://azuremlschemas.azureedge.net/latest/data.schema.json
+name: dengue-weekly
+description: Epidemiology Unit (Sri Lanka) weekly dengue cases by RDHS area, via the denguedatahub package
+type: uri_file
+path: ../data/raw/srilanka_weekly_dengue.csv

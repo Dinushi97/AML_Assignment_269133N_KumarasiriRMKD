@@ -1,0 +1,17 @@
+# Python environment for the Azure ML training job (same pins as requirements.txt)
+name: dengue-train
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - pip:
+      - numpy==2.5.3
+      - pandas==3.0.5
+      - scikit-learn==1.9.1
+      - xgboost==3.4.1
+      - lightgbm==4.7.0
+      - catboost==1.2.10
+      - joblib==1.6.0
+      - mlflow==3.17.2
+      - azureml-mlflow

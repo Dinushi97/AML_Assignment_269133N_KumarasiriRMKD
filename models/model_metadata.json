@@ -1,0 +1,73 @@
+{
+  "model_name": "LightGBM",
+  "features": [
+    "rel_now",
+    "rel_lag1",
+    "rel_lag2",
+    "rel_lag3",
+    "rel_ma4",
+    "rel_ma8",
+    "rel_ma12",
+    "rel_ma52",
+    "growth_1w",
+    "growth_4w",
+    "volatility_8w",
+    "rel_same_week_last_year",
+    "seasonal_norm",
+    "target_week_sin",
+    "target_week_cos",
+    "national_growth_1w",
+    "national_growth_4w",
+    "share_districts_high",
+    "district_baseline"
+  ],
+  "feature_descriptions": {
+    "rel_now": "This week's cases vs district threshold (log ratio)",
+    "rel_lag1": "Cases 1 week ago vs threshold (log ratio)",
+    "rel_lag2": "Cases 2 weeks ago vs threshold (log ratio)",
+    "rel_lag3": "Cases 3 weeks ago vs threshold (log ratio)",
+    "rel_ma4": "4-week average vs threshold (log ratio)",
+    "rel_ma8": "8-week average vs threshold (log ratio)",
+    "rel_ma12": "12-week average vs threshold (log ratio)",
+    "rel_ma52": "52-week average vs threshold (log ratio)",
+    "growth_1w": "Week-on-week growth (log)",
+    "growth_4w": "Growth over 4 weeks (log)",
+    "volatility_8w": "Std. dev. of weekly log cases, last 8 weeks",
+    "rel_same_week_last_year": "Cases in the target week last year vs threshold",
+    "seasonal_norm": "Typical level for the target week (2012-21 median)",
+    "target_week_sin": "Seasonality of target week (sine)",
+    "target_week_cos": "Seasonality of target week (cosine)",
+    "national_growth_1w": "Sri Lanka total cases, 1-week growth (log)",
+    "national_growth_4w": "Sri Lanka total cases, 4-week growth (log)",
+    "share_districts_high": "Share of districts above their threshold this week",
+    "district_baseline": "District's usual burden: log(1 + threshold)"
+  },
+  "decision_threshold": 0.59,
+  "horizon_weeks": 2,
+  "reference_years": [
+    2012,
+    2021
+  ],
+  "trained_on": "2007-12-29 to 2023-12-16 (21528 district-weeks)",
+  "test_metrics": {
+    "ROC-AUC": 0.8769,
+    "PR-AUC": 0.7913,
+    "F1": 0.7235,
+    "Precision": 0.6557,
+    "Recall": 0.807,
+    "Bal. acc.": 0.7922,
+    "Brier": 0.164
+  },
+  "best_params": {
+    "n_estimators": 500,
+    "learning_rate": 0.01017647252942279,
+    "num_leaves": 4,
+    "max_depth": 8,
+    "min_child_samples": 206,
+    "subsample": 0.959425024012944,
+    "colsample_bytree": 0.5281062545257524,
+    "reg_lambda": 0.002271814736990715,
+    "reg_alpha": 0.0049949387914562625,
+    "scale_pos_weight": 2.8403707315832047
+  }
+}

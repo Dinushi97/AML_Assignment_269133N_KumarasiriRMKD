@@ -1,0 +1,12 @@
+# files NOT uploaded with the Azure ML training job
+.git/
+.github/
+notebooks/
+reports/
+mlruns/
+mlflow.db
+*.zip
+__pycache__/
+.pytest_cache/
+app/
+docs/
