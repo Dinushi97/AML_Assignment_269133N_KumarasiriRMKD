@@ -165,7 +165,7 @@ with tab_dist:
             cdf["direction"] = np.where(cdf["contribution"] > 0, "raises risk", "lowers risk")
             ch = alt.Chart(cdf).mark_bar().encode(
                 x=alt.X("contribution:Q", title="contribution to log-odds of a high-risk week"),
-                y=alt.Y("term:N", sort=None, title=None),
+                y=alt.Y("term:N", sort=None, title=None, axis=alt.Axis(labelLimit=320)),
                 color=alt.Color("direction:N", scale=alt.Scale(domain=["raises risk", "lowers risk"], range=["#d64545", "#2a6f97"]), title=None),
                 tooltip=["term", alt.Tooltip("contribution:Q", format="+.3f")]).properties(height=320)
             st.altair_chart(ch, width="stretch")

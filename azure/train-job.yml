@@ -1,7 +1,7 @@
 $schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
 display_name: dengue-ews-train
 experiment_name: dengue-early-warning
-description: Validate data -> features -> train LightGBM with tuned params -> evaluate vs persistence -> quality gate
+description: Validate data -> features -> train the Explainable Boosting Machine (EBM) with tuned params -> evaluate vs persistence -> quality gate
 code: ..
 command: >-
   python -m src.train

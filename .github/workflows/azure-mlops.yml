@@ -26,7 +26,7 @@ permissions:
 env:
   RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
   WORKSPACE: ${{ vars.AZURE_ML_WORKSPACE }}
-  MODEL_NAME: dengue-ews-lightgbm
+  MODEL_NAME: dengue-ews-ebm
 
 jobs:
   # 1 ── unit tests: data validation, leakage, purged split, saved-model/app consistency
@@ -99,7 +99,7 @@ jobs:
         run: |
           az ml model create --name "$MODEL_NAME" --type custom_model \
             --path "azureml://jobs/${{ steps.job.outputs.job_name }}/outputs/model_dir" \
-            --description "Dengue early-warning LightGBM (2-week horizon)" \
+            --description "Dengue early-warning EBM (2-week horizon)" \
             --tags git_sha=${{ github.sha }} job=${{ steps.job.outputs.job_name }}
 
   # 3 ── deploy the Streamlit app to Azure App Service with the newly registered model
