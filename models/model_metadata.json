@@ -1,5 +1,5 @@
 {
-  "model_name": "Explainable Boosting Machine (EBM)",
+  "model_name": "Spline GAM (generalized additive model)",
   "features": [
     "rel_now",
     "rel_lag1",
@@ -42,7 +42,7 @@
     "share_districts_high": "Share of districts above their threshold this week",
     "district_baseline": "District's usual burden: log(1 + threshold)"
   },
-  "decision_threshold": 0.30999999999999994,
+  "decision_threshold": 0.36999999999999994,
   "horizon_weeks": 2,
   "reference_years": [
     2012,
@@ -50,21 +50,18 @@
   ],
   "trained_on": "2007-12-29 to 2023-12-16 (21528 district-weeks)",
   "test_metrics": {
-    "ROC-AUC": 0.8673,
-    "PR-AUC": 0.7768,
-    "F1": 0.7145,
-    "Precision": 0.6451,
-    "Recall": 0.8006,
-    "Bal. acc.": 0.7846,
-    "Brier": 0.1383
+    "ROC-AUC": 0.8805,
+    "PR-AUC": 0.7997,
+    "F1": 0.7236,
+    "Precision": 0.6845,
+    "Recall": 0.7673,
+    "Bal. acc.": 0.7908,
+    "Brier": 0.1332
   },
   "best_params": {
-    "learning_rate": 0.0789329635930778,
-    "max_leaves": 4,
-    "min_samples_leaf": 11,
-    "max_bins": 39,
-    "interactions": 3,
-    "smoothing_rounds": 50,
-    "outer_bags": 8
+    "lam": 508.907343010699,
+    "n_splines": 16,
+    "spline_order": 2,
+    "n_interactions": 1
   }
 }

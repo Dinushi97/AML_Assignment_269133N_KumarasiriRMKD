@@ -98,17 +98,22 @@ class SplineGAMClassifier(BaseEstimator, ClassifierMixin):
         self.term_names_ = names + [f"{a} & {b}" for a, b in self.interactions]
         self.classes_ = np.array([0, 1])
         self.n_features_in_ = len(names)
+        # centre every term on its training mean (moved into the intercept), so a contribution means
+        # "compared with an average training week"; the prediction itself is unchanged
+        self.term_offsets_ = self._raw_parts(self._array(X)).mean(axis=0)
         return self
+
+    def _raw_parts(self, Xa):
+        return np.column_stack([self.gam_.partial_dependence(term=i, X=Xa) for i in range(len(self.term_names_))])
 
     @property
     def intercept_(self):
-        return float(self.gam_.coef_[-1])
+        return float(self.gam_.coef_[-1] + self.term_offsets_.sum())
 
     def term_contributions(self, X):
-        """Per-term contributions to the log-odds (rows = samples). intercept_ + row sum = logit exactly."""
+        """Centred per-term contributions to the log-odds (rows = samples). intercept_ + row sum = logit exactly."""
         import pandas as pd
-        Xa = self._array(X)
-        parts = np.column_stack([self.gam_.partial_dependence(term=i, X=Xa) for i in range(len(self.term_names_))])
+        parts = self._raw_parts(self._array(X)) - self.term_offsets_
         return pd.DataFrame(parts, columns=self.term_names_, index=getattr(X, "index", None))
 
     def decision_function(self, X):
