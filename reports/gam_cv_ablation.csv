@@ -1,0 +1,9 @@
+variant,cv_pr_auc
+tuned (selected),0.7835629955062517
+no interactions (purely additive),0.7819215471969294
+all 3 candidate interactions,0.782696905891975
+monotone curves for level features,0.7820740239363974
+lam x 10 (smoother),0.7804647825062835
+lam / 10 (wigglier),0.782442828520504
+"recency weighting, half-life 4 y",0.7831691530518686
+"recency weighting, half-life 8 y",0.783591592577793
