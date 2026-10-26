@@ -1,6 +1,6 @@
 # %% [markdown]
 # # Dengue Early-Warning for Sri Lankan Districts
-# ### Predicting high-transmission dengue weeks two weeks ahead with an Explainable Boosting Machine (EBM), explained with its glass-box terms, SHAP and LIME
+# ### Predicting high-transmission dengue weeks two weeks ahead with a spline Generalized Additive Model (GAM), explained with its glass-box terms, SHAP and LIME
 #
 # **Module:** Applied Machine Learning – final assignment
 #
@@ -68,12 +68,11 @@ from sklearn.metrics import (roc_auc_score, average_precision_score, f1_score, p
                              roc_curve, precision_recall_curve, confusion_matrix, ConfusionMatrixDisplay)
 from sklearn.calibration import calibration_curve
 from xgboost import XGBClassifier
-from interpret.glassbox import ExplainableBoostingClassifier   # the new algorithm
-import interpret, optuna, shap, lime, lime.lime_tabular
+import pygam, optuna, shap, lime, lime.lime_tabular
 
 from src.features import (load_raw, clean, fit_reference, build_features, split, time_series_folds,
                           FEATURES, FEATURE_DESCRIPTIONS, HORIZON, REFERENCE_YEARS)
-from src.models import PersistenceBaseline
+from src.models import PersistenceBaseline, SplineGAMClassifier, CANDIDATE_INTERACTIONS   # the new algorithm
 
 SEED = 42
 np.random.seed(SEED)
@@ -85,7 +84,7 @@ plt.rcParams.update({"figure.dpi": 110, "axes.titleweight": "bold"})
 def savefig(name):
     plt.savefig(FIG / f"{name}.png", dpi=130, bbox_inches="tight")
 
-print("numpy", np.__version__, "| pandas", pd.__version__, "| interpret (EBM)", interpret.__version__,
+print("numpy", np.__version__, "| pandas", pd.__version__, "| pygam (spline GAM)", pygam.__version__,
       "| shap", shap.__version__, "| optuna", optuna.__version__)
 
 # %% [markdown]
@@ -288,7 +287,7 @@ sns.heatmap(feat[FEATURES].dropna().corr(), cmap="vlag", center=0, ax=ax, annot=
 ax.set_title("Feature correlations"); savefig("eda_feature_corr"); plt.show()
 
 # %% [markdown]
-# The lag and moving-average features are strongly correlated with each other, which is expected. EBM fits one feature at a time in small cyclic steps, which makes it robust to collinear inputs. The logistic-regression comparison model uses regularisation for the same reason.
+# The lag and moving-average features are strongly correlated with each other, which is expected. For the spline GAM, correlated inputs can share an effect between them (called concurvity). The smoothness penalty shrinks redundant curves towards flat lines, which keeps the fit stable. The logistic-regression comparison model uses regularisation for the same reason.
 #
 # ### 6.5 Chronological train / validation / test split (with purging)
 # * **Train:** report weeks in 2007–2021 · **Validation:** 2022–2023 · **Test:** 2024 → May 2026 (never used for any decision)
@@ -335,7 +334,7 @@ plt.xticks(rotation=45); savefig("eda_class_balance"); plt.show()
 # * The decision threshold is chosen on the out-of-fold CV predictions, not left at 0.5.
 #
 # ### 6.6 Scaling
-# EBM and the tree models don't depend on feature scale, so they use the raw engineered features. Logistic regression and k-NN (which is distance-based) use a `StandardScaler` **inside a Pipeline**, which is fitted on each training fold only, so there's no leakage.
+# The spline GAM places its spline knots over each feature's own range, and the tree models only use split points, so neither depends on feature scale and both use the raw engineered features. Logistic regression and k-NN (which is distance-based) use a `StandardScaler` **inside a Pipeline**, which is fitted on each training fold only, so there's no leakage.
 
 # %%
 sc = StandardScaler().fit(X_dev)
@@ -386,44 +385,42 @@ cv_rows.append({"model": "Seasonal naive (last year)", "stage": "baseline",
 display(pd.DataFrame(cv_rows).round(3))
 
 # %% [markdown]
-# ## 8. The new algorithm: Explainable Boosting Machine (EBM)
+# ## 8. The new algorithm: spline Generalized Additive Model (GAM)
 #
-# **What it is.** The Explainable Boosting Machine (Lou, Caruana et al., KDD 2012/2013; Nori et al., *InterpretML*, Microsoft Research, 2019) is a modern **generalized additive model with pairwise interactions (GA²M)**:
+# **What it is.** A Generalized Additive Model (Hastie & Tibshirani, 1986/1990) replaces each linear term of a logistic model with a **smooth, learned function** of that feature. Here each function is a **penalised B-spline (P-spline)** (Eilers & Marx, 1996), fitted with the `pyGAM` library (Servén & Brummitt, 2018):
 #
-# $$\text{logit}\,P(y=1\mid x) \;=\; \beta_0 \;+\; \sum_{j} f_j(x_j) \;+\; \sum_{(i,j)\in\mathcal{I}} f_{ij}(x_i, x_j)$$
+# $$\text{logit}\,P(y=1\mid x) \;=\; \beta_0 \;+\; \sum_{j} f_j(x_j) \;+\; \sum_{(i,j)\in\mathcal{I}} f_{ij}(x_i, x_j), \qquad f_j(x) = \sum_{k=1}^{K} \beta_{jk}\, B_k(x)$$
 #
-# Each $f_j$ is a **shape function** learned for one feature, and each $f_{ij}$ is a small 2-D function for a pair of features. It's trained like this:
-# 1. **Cyclic gradient boosting, one feature at a time.** In each round EBM visits every feature in turn and fits a *very small* tree (2–4 leaves) to the current residuals, *using only that feature*, with a tiny learning rate. Thousands of rounds build a smooth, non-linear $f_j$ for each feature without features interfering with each other.
-# 2. **Bagging** (outer bags) averages several runs, which smooths the shape functions and gives error bars.
-# 3. **Interaction detection (FAST)** ranks feature pairs and adds the strongest $f_{ij}$ terms in a second stage.
+# * **Basis expansion.** Each feature's range is covered by $K$ overlapping cubic B-spline "bumps" $B_k$ (`n_splines` = $K$). A weighted sum of the bumps can follow any smooth curve.
+# * **Smoothness penalty.** Too many bumps would overfit, so the fit maximises a *penalised* likelihood: $\;\ell(\beta) - \lambda \sum_j \beta_j^\top D^\top D\, \beta_j$, where $D$ takes second differences of neighbouring coefficients. Large $\lambda$ (`lam`) forces near-straight lines; small $\lambda$ allows wiggles. $\lambda$ trades bias against variance and is tuned by cross-validation.
+# * **Fitting: penalised iteratively re-weighted least squares (PIRLS).** Each iteration solves a weighted, penalised least-squares problem, the same Newton method used for logistic regression, but on the expanded spline basis. The optimum is unique (convex), so there's no randomness and no ensemble.
+# * **Interactions (optional).** A **tensor-product spline** $f_{ij}(x_i,x_j)$ is a smooth 2-D surface for a chosen pair of features. Tuning decides how many candidate pairs to add (0–3).
+# * **Uncertainty.** Because it is a penalised regression, pyGAM gives a **95% confidence band** for every learned curve.
 #
-# Because the final model is a **sum of 1-D and 2-D lookup tables**, every prediction decomposes *exactly* into per-feature contributions. It's a **glass-box** model, unlike black-box ensembles that need post-hoc explainers.
+# Because the final model is a **sum of 1-D curves (and a few 2-D surfaces)**, every prediction decomposes *exactly* into per-feature contributions. It's a **glass-box** model, unlike black-box ensembles that need post-hoc explainers.
 #
 # **How it differs from the standard models taught in the module** (these are used below only as comparisons):
 #
-# | | Logistic regression | Decision tree | k-NN | Random Forest / XGBoost | **EBM (new)** |
+# | | Logistic regression | Decision tree | k-NN | Random Forest / XGBoost | **Spline GAM (new)** |
 # |---|---|---|---|---|---|
-# | Model form | linear sum of features | one tree | stored training examples | many trees on *all* features, averaged or boosted | **additive sum of per-feature functions + a few pairwise terms** |
-# | Non-linear effects | no (unless engineered) | yes, as coarse steps | yes, implicitly | yes | **yes, as a smooth learned curve per feature** |
-# | Interactions | none | yes, unrestricted | implicit | yes, unrestricted (hard to see) | **only selected pairs, each visible as a heat map** |
-# | Interpretability | coefficients | readable only when shallow | none (lazy) | needs SHAP/LIME (approximate) | **exact, built-in global and local explanations** |
+# | Model form | linear sum of features | one tree | stored training examples | many trees on *all* features, averaged or boosted | **additive sum of smooth spline curves + optional 2-D spline surfaces** |
+# | Non-linear effects | no (unless engineered) | yes, as coarse steps | yes, implicitly | yes, as many steps | **yes, as a smooth curve per feature** |
+# | How it is fitted | maximum likelihood (IRLS) | greedy splitting | no fitting (lazy) | greedy splitting, bagging / boosting | **penalised likelihood (PIRLS) with a smoothness penalty** |
+# | Interactions | none | yes, unrestricted | implicit | yes, unrestricted (hard to see) | **only chosen pairs, each visible as a surface** |
+# | Interpretability | coefficients | readable only when shallow | none (lazy) | needs SHAP/LIME (approximate) | **exact curves with confidence bands; exact local contributions** |
 # | Needs scaling | yes | no | yes (distance-based) | no | **no** |
-# | Accuracy on tabular data | often too simple | high variance | weak in many dimensions | usually high | **usually on par with RF/boosting** |
 #
-# **Why EBM for this problem.** The EDA showed threshold-like, non-linear effects (risk jumps as a district nears its threshold), a few clear interactions (level × season, district × national wave), and collinear lag features. For a **public-health early warning**, officials must be able to **see and trust *why*** a district is flagged. EBM promises black-box-level accuracy while staying fully interpretable, and the comparison below tests whether that holds here.
+# It is the natural middle ground between logistic regression (too rigid: one straight line per feature) and tree ensembles (flexible but opaque).
+#
+# **Why a spline GAM for this problem.** The EDA showed smooth threshold-like effects (risk rises steeply as a district nears its threshold), seasonality, and collinear lag features. Smooth curves suit these, and the smoothness penalty stops the model from chasing noise in small districts. For a **public-health early warning**, officials must be able to **see and trust *why*** a district is flagged. A GAM shows the exact curve behind each feature's effect, with uncertainty, so every alert can be audited. The comparison below tests how much accuracy this costs.
 
 # %% [markdown]
 # ## 9. Models with default hyperparameters (reference point only)
-# The new algorithm (EBM) and five **standard models** (logistic regression, decision tree, k-NN, Random Forest, XGBoost) are first run with library defaults. This shows how much tuning matters. Logistic regression and k-NN use a `StandardScaler` inside a pipeline.
+# The new algorithm (spline GAM) and five **standard models** (logistic regression, decision tree, k-NN, Random Forest, XGBoost) are first run with library defaults. This shows how much tuning matters. Logistic regression and k-NN use a `StandardScaler` inside a pipeline.
 
 # %%
-def ebm(**kw):
-    base = dict(random_state=SEED, n_jobs=-1)
-    base.update(kw)
-    return ExplainableBoostingClassifier(**base)
-
 default_models = {
-    "EBM (new algorithm)": ebm(),
+    "Spline GAM (new algorithm)": SplineGAMClassifier(),   # pyGAM defaults: 20 splines, lam = 0.6, no interactions
     "Logistic Regression": Pipeline([("scale", StandardScaler()), ("clf", LogisticRegression(max_iter=1000))]),
     "Decision Tree": DecisionTreeClassifier(random_state=SEED),
     "k-NN": Pipeline([("scale", StandardScaler()), ("clf", KNeighborsClassifier())]),
@@ -439,26 +436,22 @@ for name, m in default_models.items():
 
 # %% [markdown]
 # ## 10. Hyperparameter tuning (Optuna, Bayesian TPE search, time-series CV)
-# **Objective:** mean PR-AUC over the five expanding-window folds. The EBM gets the largest budget because it's the proposed model. The standard models are tuned too, so the comparison is fair.
+# **Objective:** mean PR-AUC over the five expanding-window folds. The spline GAM gets the largest budget because it's the proposed model. The standard models are tuned too, so the comparison is fair.
 #
-# **EBM search space and why:**
-# * `learning_rate` (0.003–0.1, log) and `max_leaves` (2–4): EBM's core design is many *tiny* steps. Smaller steps give smoother shape functions but need more rounds.
-# * `min_samples_leaf` (2–100, log) and `max_bins` (32–512): how finely each shape function can bend. Fewer bins and larger leaves resist noise in small districts.
-# * `interactions` (0–20): how many pairwise terms to add. 0 gives a pure additive GAM, which is the most interpretable.
-# * `smoothing_rounds` (0–500): initial rounds with random splits, which make the shape functions smoother and less jagged.
-# * `outer_bags` is fixed at 4 during the search (for speed) and raised to 8 for the final model.
+# **Spline GAM search space and why:**
+# * `lam` (0.01–1000, log): the smoothness penalty, the most important setting. Small values let curves bend to follow noise; large values flatten them towards straight lines.
+# * `n_splines` (5–25): how many B-spline basis functions per feature, i.e. the maximum flexibility before the penalty is applied.
+# * `spline_order` (2 or 3): quadratic or cubic pieces.
+# * `n_interactions` (0–3): how many tensor-product surfaces to add, taken in order from three candidate pairs chosen from the EDA and domain knowledge: `rel_now × district_baseline` (is a high week more persistent in big districts?), `target_week_sin × share_districts_high` (does a national wave matter more in some seasons?) and `rel_ma4 × growth_4w` (level × momentum). 0 gives a purely additive model, the most interpretable.
 
 # %%
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
-def ebm_space(t, bags=4):
-    return ebm(learning_rate=t.suggest_float("learning_rate", 0.003, 0.1, log=True),
-               max_leaves=t.suggest_int("max_leaves", 2, 4),
-               min_samples_leaf=t.suggest_int("min_samples_leaf", 2, 100, log=True),
-               max_bins=t.suggest_int("max_bins", 32, 512, log=True),
-               interactions=t.suggest_int("interactions", 0, 20),
-               smoothing_rounds=t.suggest_int("smoothing_rounds", 0, 500, step=50),
-               outer_bags=bags)
+def gam_space(t):
+    return SplineGAMClassifier(lam=t.suggest_float("lam", 1e-2, 1e3, log=True),
+                               n_splines=t.suggest_int("n_splines", 5, 25),
+                               spline_order=t.suggest_categorical("spline_order", [2, 3]),
+                               interactions=CANDIDATE_INTERACTIONS[:t.suggest_int("n_interactions", 0, 3)])
 
 def lr_space(t):
     return Pipeline([("scale", StandardScaler()), ("clf", LogisticRegression(
@@ -491,7 +484,7 @@ def xgb_space(t):
         reg_lambda=t.suggest_float("reg_lambda", 1e-2, 20, log=True), scale_pos_weight=t.suggest_float("scale_pos_weight", 1, 3),
         tree_method="hist", eval_metric="logloss", n_jobs=-1, random_state=SEED)
 
-spaces = {"EBM (new algorithm)": (ebm_space, 20), "Logistic Regression": (lr_space, 10), "Decision Tree": (dt_space, 20),
+spaces = {"Spline GAM (new algorithm)": (gam_space, 25), "Logistic Regression": (lr_space, 10), "Decision Tree": (dt_space, 20),
           "k-NN": (knn_space, 15), "Random Forest": (rf_space, 10), "XGBoost": (xgb_space, 20)}
 
 studies, tuned = {}, {}
@@ -503,10 +496,7 @@ for name, (space, n_trials) in spaces.items():
     tuned[name] = space(optuna.trial.FixedTrial(study.best_params))
     print(f"{name:22s} best CV PR-AUC = {study.best_value:.4f}  (default {default_scores[name]:.4f}) | {n_trials} trials, {time.time()-t0:.0f}s")
 
-# the final EBM uses more outer bags than the search (smoother shape functions, same settings otherwise)
-tuned["EBM (new algorithm)"] = ebm_space(optuna.trial.FixedTrial(studies["EBM (new algorithm)"].best_params), bags=8)
 best_params = {n: s.best_params for n, s in studies.items()}
-best_params["EBM (new algorithm)"]["outer_bags"] = 8
 json.dump(best_params, open(MODELS / "best_params.json", "w"), indent=2, default=str)
 best_params
 
@@ -521,8 +511,8 @@ savefig("tuning_history"); plt.show()
 
 # %%
 try:
-    imp = optuna.importance.get_param_importances(studies["EBM (new algorithm)"])
-    display(pd.Series(imp).round(3).to_frame("importance for EBM CV PR-AUC"))
+    imp = optuna.importance.get_param_importances(studies["Spline GAM (new algorithm)"])
+    display(pd.Series(imp).round(3).to_frame("importance for spline GAM CV PR-AUC"))
 except Exception as e:
     print(e)
 
@@ -545,17 +535,17 @@ ax.set_xlabel("CV PR-AUC"); ax.set_title("Effect of hyperparameter tuning"); sav
 
 # %% [markdown]
 # Each model's decision threshold maximises **F1 on its pooled out-of-fold CV predictions**. The test set is never used for this.
-# The **proposed model is the EBM**, chosen for the reasons in §8. The standard models answer one question: *does choosing an interpretable model cost accuracy here?*
+# The **proposed model is the spline GAM**, chosen for the reasons in §8. The standard models answer one question: *does choosing an interpretable model cost accuracy here?*
 
 # %%
-SELECTED = "EBM (new algorithm)"
+SELECTED = "Spline GAM (new algorithm)"
 cands = list(tuned)
 thresholds = {n: best_threshold(y_oof, oof_store[n]) for n in cands}
 thresholds["Persistence (next = now)"] = 0.5
 thresholds["Seasonal naive (last year)"] = 0.5
 cv_rank = cv_tbl[cv_tbl["stage"] == "tuned"].set_index("model")["CV PR-AUC"].sort_values(ascending=False)
 print(cv_rank.round(4).to_string())
-print(f"\nEBM rank by CV PR-AUC: {list(cv_rank.index).index(SELECTED) + 1} of {len(cv_rank)} | gap to best standard model: "
+print(f"\nSpline GAM rank by CV PR-AUC: {list(cv_rank.index).index(SELECTED) + 1} of {len(cv_rank)} | gap to best standard model: "
       f"{cv_rank[SELECTED] - cv_rank.drop(SELECTED).max():+.4f} | decision threshold = {thresholds[SELECTED]:.2f}")
 
 # %% [markdown]
@@ -586,10 +576,10 @@ for _ in range(500):
 ci = pd.DataFrame({n: {"PR-AUC 95% CI": f"{np.percentile([b[0] for b in v], 2.5):.3f} – {np.percentile([b[0] for b in v], 97.5):.3f}",
                        "F1 95% CI": f"{np.percentile([b[1] for b in v], 2.5):.3f} – {np.percentile([b[1] for b in v], 97.5):.3f}"} for n, v in boot.items()}).T
 sel_boot = np.array(boot[SELECTED]); per_boot = np.array(boot["Persistence (next = now)"])
-print(f"P(EBM F1 > persistence F1) over bootstrap = {(sel_boot[:,1] > per_boot[:,1]).mean():.3f}")
+print(f"P(GAM F1 > persistence F1) over bootstrap = {(sel_boot[:,1] > per_boot[:,1]).mean():.3f}")
 best_std = res.drop(index=[SELECTED, "Persistence (next = now)", "Seasonal naive (last year)"])["PR-AUC"].idxmax()
 std_boot = np.array(boot[best_std])
-print(f"P(EBM PR-AUC > {best_std} PR-AUC) over bootstrap = {(sel_boot[:,0] > std_boot[:,0]).mean():.3f}")
+print(f"P(GAM PR-AUC > {best_std} PR-AUC) over bootstrap = {(sel_boot[:,0] > std_boot[:,0]).mean():.3f}")
 display(ci)
 
 # %%
@@ -611,7 +601,7 @@ savefig("test_roc_pr"); plt.show()
 best_model = final_models[SELECTED]; p_best = test_pred[SELECTED]; thr_best = thresholds[SELECTED]
 fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
 ConfusionMatrixDisplay(confusion_matrix(y_test, p_best >= thr_best), display_labels=["normal", "high risk"]).plot(ax=axes[0], cmap="Reds", colorbar=False)
-axes[0].set_title(f"EBM – confusion matrix (thr={thr_best:.2f})")
+axes[0].set_title(f"Spline GAM – confusion matrix (thr={thr_best:.2f})")
 for n in [SELECTED, best_std]:
     fp, mp = calibration_curve(y_test, test_pred[n], n_bins=10, strategy="quantile")
     axes[1].plot(mp, fp, "o-", label=n, color=pal[n])
@@ -629,7 +619,7 @@ per_d = test_eval.groupby("district").apply(lambda g: pd.Series({
 fig, ax = plt.subplots(figsize=(9, 7))
 ax.barh(per_d.index, per_d["Accuracy"], color="#bfc9d1", label="accuracy")
 ax.barh(per_d.index, per_d["F1"], color="#b23a48", height=.5, label="F1 (high-risk class)")
-ax.set_title("Per-district test performance – EBM"); ax.legend(loc="lower right")
+ax.set_title("Per-district test performance – spline GAM"); ax.legend(loc="lower right")
 savefig("test_per_district"); plt.show()
 display(per_d.round(2).T)
 
@@ -639,111 +629,94 @@ for ax, d in zip(axes, ["Colombo", "Kandy", "Batticaloa"]):
     g = test_eval[test_eval["district"] == d]
     ax.bar(g["target_date"], g["target_cases"], width=5, color=np.where(g["high_risk"] == 1, "#e8a0a8", "#c9d3dc"), label="actual cases in target week")
     ax.axhline(g["threshold"].iloc[0], c="k", ls="--", lw=1, label="district threshold")
-    ax2 = ax.twinx(); ax2.plot(g["target_date"], g["p"], c="#b23a48", lw=2, label="EBM P(high risk), made 2 weeks earlier")
+    ax2 = ax.twinx(); ax2.plot(g["target_date"], g["p"], c="#b23a48", lw=2, label="GAM P(high risk), made 2 weeks earlier")
     ax2.axhline(thr_best, c="#b23a48", ls=":", lw=1); ax2.set_ylim(0, 1); ax2.set_ylabel("probability")
     ax.set_title(d); ax.set_ylabel("cases")
     if d == "Colombo":
         h1, l1 = ax.get_legend_handles_labels(); h2, l2 = ax2.get_legend_handles_labels(); ax.legend(h1 + h2, l1 + l2, fontsize=8, loc="upper left")
-fig.suptitle("Two-week-ahead EBM forecasts on the test period", y=1.0); fig.tight_layout(); savefig("test_timelines"); plt.show()
+fig.suptitle("Two-week-ahead spline GAM forecasts on the test period", y=1.0); fig.tight_layout(); savefig("test_timelines"); plt.show()
 
 # %% [markdown]
 # ### 12.1 What the results show
 #
-# | Test set (Jan 2024 – May 2026) | ROC-AUC | PR-AUC | F1 | Precision | Recall | Bal. acc. |
-# |---|---|---|---|---|---|---|
-# | **EBM (new algorithm)** | **0.867** | **0.777** | **0.715** | 0.645 | **0.801** | **0.785** |
-# | Random Forest (standard) | 0.883 | 0.806 | 0.730 | 0.676 | 0.793 | 0.797 |
-# | k-NN (standard) | 0.881 | 0.805 | 0.730 | 0.631 | 0.864 | 0.800 |
-# | XGBoost (standard) | 0.883 | 0.805 | 0.732 | 0.657 | 0.826 | 0.800 |
-# | Logistic regression (standard) | 0.875 | 0.785 | 0.720 | 0.673 | 0.774 | 0.788 |
-# | Decision tree (standard) | 0.862 | 0.771 | 0.704 | 0.632 | 0.793 | 0.775 |
-# | Persistence baseline | 0.772 | 0.592 | 0.700 | 0.695 | 0.706 | 0.772 |
-# | Seasonal naive | 0.585 | 0.394 | 0.472 | 0.442 | 0.506 | 0.585 |
-#
-# 1. **EBM is a useful early-warning model.** Against the persistence rule ("next is like now"), PR-AUC rises from 0.59 to 0.78, and **recall from 71% to 80%**. That's about one in three outbreak weeks that persistence misses, now caught two weeks ahead. F1 is higher than persistence in 92% of bootstrap resamples.
-# 2. **In cross-validation, EBM matches the black-box models.** Its CV PR-AUC (0.786) is second of six, only 0.001 behind XGBoost (0.787) and ahead of Random Forest (0.785). Tuning gave EBM little extra (+0.002) because its defaults are already strong. Tuning mattered far more for the decision tree (+0.27) and k-NN (+0.12).
-# 3. **On the test period, EBM trails the strongest black boxes by about 0.03 PR-AUC.** Random Forest, XGBoost and k-NN reach about 0.805, against EBM's 0.777. The bootstrap shows this gap is real (Random Forest is ahead in 99% of resamples), although the F1 difference is only 0.015 and the intervals overlap. A likely reason is the regime shift: the test years are much more epidemic than training (34% vs 20% positive). Models that mainly respond to *recent levels* adapted slightly better than EBM's additive curves, which also learned some seasonal and national effects from the past.
-# 4. **This is the accuracy–interpretability trade-off, measured.** For about 3 points of PR-AUC, EBM gives an **exact, complete explanation of every forecast** (§13). Random Forest, XGBoost and k-NN can only be explained approximately, after the fact. EBM also clearly beats the other two *interpretable* standard models: the decision tree (0.771) and, in cross-validation, logistic regression (0.786 vs 0.779).
-# 5. **Errors.** On 3,145 test district-weeks, EBM caught **867** high weeks and missed **216**, raised **477** false alarms, and correctly cleared **1,585** normal weeks. The CV-chosen threshold (0.31) deliberately favours recall.
-# 6. **Hold-out point.** Colombo, week of 27 Apr 2026 (300 cases): P = 0.32, just above the 0.31 threshold, so it's predicted HIGH. Two weeks later Colombo reported 308 cases against a threshold of 291, so the prediction was correct.
-#
-# **Why EBM is kept as the proposed model.** The assignment asks for a *new* algorithm and for its behaviour to be explained. In a public-health setting, an alert that officials can audit term by term is worth a small loss in ranking accuracy. EBM delivers that while staying within cross-validation noise of the best black box and far above the naive baselines. The standard models are reported openly so the cost of this choice is visible.
+# RESULTS_12_1
 
 # %% [markdown]
-# ### 12.2 Could accuracy be higher? Other algorithms and EBM variants
+# ### 12.2 Could accuracy be higher? Other algorithms and GAM variants
 #
-# To check whether another **new** algorithm (not in the lectures, not deep learning) would do better, eight more algorithms and seven EBM refinements were scored with the **same expanding-window CV**.
+# To check whether another **new** algorithm (not in the lectures, not deep learning) would do better, other algorithms and several GAM refinements were scored with the **same expanding-window CV**.
 # Selection uses CV only. Test PR-AUC is listed for reference; choosing a model by test score would leak the test period into model selection.
-# The scripts are `scripts/other_algorithms.py` and `scripts/ebm_cv_experiments.py`; they take about 10 minutes, so their saved results are loaded here.
+# The scripts are `scripts/other_algorithms.py` and `scripts/gam_cv_experiments.py`; they take about 15 minutes, so their saved results are loaded here.
 
 # %%
 other = pd.read_csv(ROOT / "reports" / "other_algorithms.csv").sort_values("cv_pr_auc", ascending=False)
-print("Other algorithms not covered in lectures (sorted by CV PR-AUC):")
+print("Algorithms not covered in lectures (sorted by CV PR-AUC):")
 print(other.round(4).to_string(index=False))
-ablation = pd.read_csv(ROOT / "reports" / "ebm_cv_ablation.csv")
-print("\nEBM refinements (CV PR-AUC, 4 outer bags during screening):")
-print(ablation.to_string(index=False))
+ablation = pd.read_csv(ROOT / "reports" / "gam_cv_ablation.csv")
+print("\nSpline GAM refinements (CV PR-AUC):")
+print(ablation.round(4).to_string(index=False))
 
 # %% [markdown]
-# **Reading.** By the selection criterion (CV), EBM is **2nd of 9**. Only stacking is higher, by 0.003, which is within fold noise, and stacking is a black box built from lecture models.
-# NGBoost and Extra Trees are close variants of gradient boosting and Random Forest. The interpretable alternatives (RuleFit, spline GAM) are below EBM in CV.
-# None of the EBM refinements changed CV PR-AUC by more than ±0.005, so **the tuned EBM is kept**.
-# Several alternatives score about 0.02–0.03 higher on the 2024–26 test period, which suggests smoother models adapt slightly better to the recent epidemic regime. This is recorded as a limitation (§16), not used to switch models.
+# RESULTS_12_2
 
 # %% [markdown]
 # ## 13. Explainability
-# EBM is interpretable by design, so explanations come from **three independent angles**:
-# 1. **EBM's own glass-box explanations:** global term importance, the learned shape functions (equivalent to exact partial-dependence curves), interaction heat maps, and exact local contributions.
+# The spline GAM is interpretable by design, so explanations come from **three independent angles**:
+# 1. **The GAM's own glass-box explanations:** global term importance, the learned spline curves with 95% confidence bands (these *are* the model's exact partial-dependence curves), the interaction surface, and exact local contributions.
 # 2. **SHAP:** model-agnostic Shapley values (permutation explainer).
 # 3. **LIME:** local surrogate models.
 #
-# ### 13.1 Glass-box explanations from the EBM
+# ### 13.1 Glass-box explanations from the spline GAM
 
 # %%
 term_names = list(best_model.term_names_)
-term_imp = pd.Series(best_model.term_importances(), index=term_names).sort_values(ascending=False)
+dev_contrib = best_model.term_contributions(X_dev)
+term_imp = dev_contrib.abs().mean().sort_values(ascending=False)   # mean |contribution| over the development set
 fig, ax = plt.subplots(figsize=(8, 7))
 top = term_imp.head(18)[::-1]
 ax.barh(top.index, top.values, color=["#2a6f97" if " & " in t else "#b23a48" for t in top.index])
-ax.set_xlabel("mean |contribution| (log-odds)"); ax.set_title("EBM global term importance (red = single feature, blue = interaction)")
-savefig("ebm_importance"); plt.show()
-print(f"{len(term_names)} terms: {sum(' & ' not in t for t in term_names)} single-feature shape functions + {sum(' & ' in t for t in term_names)} pairwise interactions")
+ax.set_xlabel("mean |contribution| (log-odds)"); ax.set_title("Spline GAM global term importance (red = single feature, blue = interaction)")
+savefig("gam_importance"); plt.show()
+print(f"{len(term_names)} terms: {sum(' & ' not in t for t in term_names)} single-feature spline curves + {sum(' & ' in t for t in term_names)} tensor-product interactions")
+print(f"effective degrees of freedom of the whole model: {best_model.gam_.statistics_['edof']:.1f}")
 display(term_imp.head(10).round(3).to_frame("importance"))
 
 # %%
-# Shape functions of the most important single features (exact partial dependence of the model, with bagging error bands)
-glob = best_model.explain_global()
+# Learned spline curves of the most important single features: the model's exact partial dependence, with 95% confidence bands
+g = best_model.gam_
 singles = [t for t in term_imp.index if " & " not in t][:4]
 fig, axes = plt.subplots(1, 4, figsize=(18, 3.8))
 for ax, t in zip(axes, singles):
-    d = glob.data(term_names.index(t))
-    edges = np.asarray(d["names"], dtype=float); sc = np.asarray(d["scores"], dtype=float)
-    lo, hi = np.asarray(d.get("lower_bounds", sc), dtype=float), np.asarray(d.get("upper_bounds", sc), dtype=float)
-    ax.step(edges[:-1], sc, where="post", color="#b23a48", lw=2)
-    ax.fill_between(edges[:-1], lo, hi, step="post", color="#b23a48", alpha=.15)
+    i = term_names.index(t)
+    XX = g.generate_X_grid(term=i, n=200)
+    pdep, ci = g.partial_dependence(term=i, X=XX, width=0.95)
+    lo, hi = np.percentile(X_dev[t], [1, 99]); keep = (XX[:, i] >= lo) & (XX[:, i] <= hi)   # central 98% of the data
+    ax.plot(XX[keep, i], pdep[keep], color="#b23a48", lw=2)
+    ax.fill_between(XX[keep, i], ci[keep, 0], ci[keep, 1], color="#b23a48", alpha=.15)
     ax.axhline(0, c="grey", lw=.8); ax.set_title(FEATURE_DESCRIPTIONS.get(t, t), fontsize=9); ax.set_xlabel(t)
 axes[0].set_ylabel("contribution to log-odds")
-plt.tight_layout(); savefig("ebm_shape_functions"); plt.show()
+plt.tight_layout(); savefig("gam_shape_functions"); plt.show()
 
 # %%
-# The strongest interaction as a heat map
+# The strongest interaction as a heat map of its tensor-product spline surface
 pairs = [t for t in term_imp.index if " & " in t]
 if pairs:
-    t = pairs[0]; d = glob.data(term_names.index(t))
+    t = pairs[0]; i = term_names.index(t); a, b = t.split(" & ")
+    XX = g.generate_X_grid(term=i, meshgrid=True, n=60)
+    Z = g.partial_dependence(term=i, X=XX, meshgrid=True)
     fig, ax = plt.subplots(figsize=(7, 5))
-    sc = np.asarray(d["scores"], dtype=float)
-    xe, ye = np.asarray(d["left_names"], dtype=float), np.asarray(d["right_names"], dtype=float)
-    lim = np.abs(sc).max()
-    im = ax.pcolormesh(xe, ye, sc.T, cmap="RdBu_r", vmin=-lim, vmax=lim, shading="flat")
-    a, b = t.split(" & ")
-    ax.set_xlabel(a); ax.set_ylabel(b); ax.set_title(f"EBM interaction: {t}")
-    plt.colorbar(im, label="contribution to log-odds"); savefig("ebm_interaction"); plt.show()
+    lim = np.abs(Z).max()
+    im = ax.pcolormesh(XX[0], XX[1], Z, cmap="RdBu_r", vmin=-lim, vmax=lim, shading="auto")
+    ax.set_xlabel(a); ax.set_ylabel(b); ax.set_title(f"Spline GAM interaction surface: {t}")
+    plt.colorbar(im, label="contribution to log-odds"); savefig("gam_interaction"); plt.show()
+else:
+    print("The tuned model is purely additive (no interaction terms).")
 
 # %%
 # Exact local explanation for the hold-out point: intercept + term contributions = model log-odds
 X_ho = holdout[FEATURES]
-contrib = pd.Series(best_model.eval_terms(X_ho)[0], index=term_names)
-intercept = float(np.atleast_1d(best_model.intercept_)[0])
+contrib = best_model.term_contributions(X_ho).iloc[0]
+intercept = best_model.intercept_
 logit = intercept + contrib.sum(); p_check = 1 / (1 + np.exp(-logit))
 print(f"intercept {intercept:+.3f} + sum of contributions {contrib.sum():+.3f} = {logit:+.3f} log-odds -> P = {p_check:.3f} "
       f"(model.predict_proba = {best_model.predict_proba(X_ho)[0, 1]:.3f})")
@@ -751,8 +724,8 @@ top_c = contrib.reindex(contrib.abs().sort_values(ascending=False).index).head(1
 fig, ax = plt.subplots(figsize=(9, 5))
 ax.barh(top_c.index, top_c.values, color=["#b23a48" if v > 0 else "#2a6f97" for v in top_c.values])
 ax.axvline(0, c="grey", lw=.8); ax.set_xlabel("contribution to log-odds")
-ax.set_title(f"EBM local explanation – hold-out point: {holdout['district'].iloc[0]}, week of {holdout['date'].iloc[0].date()} (P = {p_check:.2f})")
-savefig("ebm_local_holdout"); plt.show()
+ax.set_title(f"Spline GAM local explanation – hold-out point: {holdout['district'].iloc[0]}, week of {holdout['date'].iloc[0].date()} (P = {p_check:.2f})")
+savefig("gam_local_holdout"); plt.show()
 
 # %% [markdown]
 # ### 13.2 SHAP (model-agnostic Shapley values)
@@ -765,18 +738,18 @@ def f_logit(X):
 explainer = shap.PermutationExplainer(f_logit, bg)
 X_shap = X_test.sample(400, random_state=SEED)
 sv = explainer(X_shap)
-shap.plots.beeswarm(sv, max_display=19, show=False); plt.title("SHAP summary – EBM (log-odds)"); savefig("shap_beeswarm"); plt.show()
+shap.plots.beeswarm(sv, max_display=19, show=False); plt.title("SHAP summary – spline GAM (log-odds)"); savefig("shap_beeswarm"); plt.show()
 
 # %%
 shap_imp = pd.Series(np.abs(sv.values).mean(0), index=FEATURES).sort_values(ascending=False)
-# EBM's own importance per *feature* (single term + half of each interaction it belongs to)
-ebm_feat = pd.Series(0.0, index=FEATURES)
+# the GAM's own importance per *feature* (single term + half of each interaction it belongs to)
+gam_feat = pd.Series(0.0, index=FEATURES)
 for t, v in term_imp.items():
     parts = t.split(" & ")
     for p in parts:
-        ebm_feat[p] += v / len(parts)
-cmp_imp = pd.DataFrame({"SHAP mean |value|": shap_imp, "EBM importance": ebm_feat}).sort_values("SHAP mean |value|", ascending=False)
-print("Spearman rank correlation, SHAP vs EBM feature importance:", round(cmp_imp.corr(method="spearman").iloc[0, 1], 3))
+        gam_feat[p] += v / len(parts)
+cmp_imp = pd.DataFrame({"SHAP mean |value|": shap_imp, "GAM importance": gam_feat}).sort_values("SHAP mean |value|", ascending=False)
+print("Spearman rank correlation, SHAP vs GAM feature importance:", round(cmp_imp.corr(method="spearman").iloc[0, 1], 3))
 display(cmp_imp.round(3).head(10))
 fig, axes = plt.subplots(1, 3, figsize=(16, 4.2))
 for ax, f in zip(axes, shap_imp.index[:3]):
@@ -830,38 +803,23 @@ print("Features in all 5 runs:", sorted(set.intersection(*map(set, tops))))
 
 # %%
 # Agreement of the three explanation methods on the hold-out point (per feature; interactions split equally)
-ebm_local = pd.Series(0.0, index=FEATURES)
+gam_local = pd.Series(0.0, index=FEATURES)
 for t, v in contrib.items():
     parts = t.split(" & ")
     for p in parts:
-        ebm_local[p] += v / len(parts)
+        gam_local[p] += v / len(parts)
 lime_w = pd.Series({FEATURES[i]: w for i, w in e_ho.as_map()[1]})
-agree = pd.DataFrame({"EBM exact": ebm_local, "SHAP": pd.Series(sv_ho.values[0], index=FEATURES), "LIME": lime_w}).dropna()
-agree = agree.reindex(agree["EBM exact"].abs().sort_values(ascending=False).index)
-agree["EBM–SHAP same sign"] = np.sign(agree["EBM exact"]) == np.sign(agree["SHAP"])
-agree["EBM–LIME same sign"] = np.sign(agree["EBM exact"]) == np.sign(agree["LIME"])
+agree = pd.DataFrame({"GAM exact": gam_local, "SHAP": pd.Series(sv_ho.values[0], index=FEATURES), "LIME": lime_w}).dropna()
+agree = agree.reindex(agree["GAM exact"].abs().sort_values(ascending=False).index)
+agree["GAM–SHAP same sign"] = np.sign(agree["GAM exact"]) == np.sign(agree["SHAP"])
+agree["GAM–LIME same sign"] = np.sign(agree["GAM exact"]) == np.sign(agree["LIME"])
 display(agree.round(3))
-print(f"Sign agreement on LIME's top-10 features: EBM–SHAP {agree['EBM–SHAP same sign'].mean():.0%}, EBM–LIME {agree['EBM–LIME same sign'].mean():.0%}")
+print(f"Sign agreement on LIME's top-10 features: GAM–SHAP {agree['GAM–SHAP same sign'].mean():.0%}, GAM–LIME {agree['GAM–LIME same sign'].mean():.0%}")
 
 # %% [markdown]
-# ### 13.4 Interpreting the model (EBM terms, SHAP, LIME)
+# ### 13.4 Interpreting the model (GAM curves, SHAP, LIME)
 #
-# **What the model has learned.** The tuned EBM has **22 terms**: 19 single-feature shape functions plus 3 pairwise interactions.
-# 1. **Recent level relative to the district's normal is the main driver.** `rel_ma4` (importance 0.81) and `rel_now` (0.51) have **monotone, S-like shape functions**. Below about 15% of threshold (log ratio below −2), the contribution is strongly negative. It rises steeply around the threshold (0 on the log scale) and reaches +1 to +2 log-odds above it. `rel_lag1` (0.40) adds short-term momentum.
-# 2. **The national wave matters.** `share_districts_high` (0.44) rises almost steadily: when more than 80% of districts are already high, every district gets about +1.4 log-odds. `national_growth_4w` (0.30) adds national momentum.
-# 3. **Season:** `target_week_sin` and `target_week_cos` and the `seasonal_norm` encode the post-monsoon peaks.
-# 4. **Interactions found automatically:**
-#    * `rel_now × district_baseline` (0.30): being above threshold is a **stronger** signal in high-burden districts (Colombo, Gampaha), where high counts persist. In small districts, a single high week is more often noise. This is the heat map in §13.1.
-#    * `target_week_cos × national_growth_4w` and `target_week_sin × share_districts_high`: national growth means more just before the seasonal peaks than outside them.
-#
-# **The three explanation methods agree.** Feature rankings from EBM's own importance and from SHAP correlate at **Spearman 0.97**. On the hold-out point, SHAP has the same sign as EBM's exact contributions on **all 10** of LIME's top features, and LIME agrees on 9 of 10. LIME's top-5 set always contains the same four core features (`rel_ma4`, `rel_now`, `rel_lag1`, `share_districts_high`) across five random seeds.
-#
-# **Local explanations.**
-# * **Hold-out point (Colombo, 27 Apr 2026).** Baseline −2.54 log-odds, plus contributions: 4-week average at threshold +0.71, rising national trend +0.58, this week at threshold +0.46, last week +0.22, the Colombo-specific interaction +0.18, the national share +0.17; minus late-May seasonality −0.26 and a falling 4-week district trend −0.10. That sums to −0.75 log-odds, P = 0.32, just over the alert threshold. The actual count was 308 cases (HIGH) ✔. Because EBM is additive, these numbers are **exactly** the model's computation, not an approximation.
-# * **Correctly forecast onset (Hambantota, June 2025):** the district was still below threshold, but the recent average, the national share and the season pushed P to 0.95. Two weeks later it had 24 cases against a threshold of 22.
-# * **Missed outbreak (Monaragala, May 2024, P = 0.20):** recent counts were well below threshold during a calm national period. The district then jumped to 20 cases (threshold 11). Outbreaks without any early signal in the counts are this model's main blind spot.
-#
-# **Alignment with domain knowledge.** These patterns match dengue epidemiology. Transmission persists over weeks (mosquito and virus cycles), so recent level dominates. Epidemics are nationwide, driven by circulating serotypes. Risk peaks after the south-west (May–September) and north-east (December–February) monsoons. And the stronger persistence in dense urban districts is consistent with Colombo and Gampaha's year-round transmission. The model reasons the way a surveillance epidemiologist would, and because it's a glass box, any part of that reasoning can be checked and challenged.
+# RESULTS_13_4
 
 # %% [markdown]
 # ## 14. Save the model and run inference on the held-out data point
@@ -869,7 +827,7 @@ print(f"Sign agreement on LIME's top-10 features: EBM–SHAP {agree['EBM–SHAP 
 # %%
 bundle = {
     "model": best_model,
-    "model_name": "Explainable Boosting Machine (EBM)",
+    "model_name": "Spline GAM (generalized additive model)",
     "features": FEATURES,
     "feature_descriptions": FEATURE_DESCRIPTIONS,
     "decision_threshold": thr_best,
@@ -901,16 +859,7 @@ print(f"Actual outcome     : {int(r['target_cases'])} cases -> {'HIGH RISK' if r
 # %% [markdown]
 # ## 15. Conclusions
 #
-# **Summary.** Using 20 years of official Sri Lankan dengue surveillance data, I built a two-week-ahead early-warning classifier for all 26 RDHS areas, using a **new algorithm, the Explainable Boosting Machine (EBM)**.
-# After a careful EDA, three kinds of data problem were found and handled (a missing week, a year of zeros for Monaragala, and 22 implausible or misaligned weekly values). Nineteen leakage-free, scale-free features were engineered.
-# EBM was tuned with Optuna under expanding-window time-series cross-validation and compared with five standard models. It reaches **ROC-AUC 0.87, PR-AUC 0.78 and recall 0.80** on 2½ years of unseen data, far above the persistence baseline (PR-AUC 0.59). It matches the best black-box model in cross-validation and trails it by about 0.03 PR-AUC on the test period. In return, every prediction comes with an **exact explanation**, confirmed by SHAP and LIME.
-#
-# **Guideline → where it's met**
-# * §1 Problem, data source, features, size, preprocessing, ethics: notebook §1–2, §4–6
-# * §2 New algorithm (EBM), why it was chosen, and how it differs from standard models: §8
-# * §3 Split, hyperparameters, metrics, results with tables and plots: §6.5, §9–12
-# * §4 Explainability (EBM terms, shape functions as partial dependence, interactions, SHAP, LIME) and interpretation: §13
-# * §5 Critical discussion: §16 · Saved model and hold-out inference: §14 · Front-end: `app/app.py` · MLOps: `src/train.py`, `azure/`, `.github/workflows/`
+# RESULTS_15
 
 # %% [markdown]
 # ## 16. Critical discussion

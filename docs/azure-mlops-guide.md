@@ -13,7 +13,7 @@ flowchart LR
   gh --> t[1 · pytest<br/>leakage + data tests]
   t --> d[2 · register data asset<br/>version = content hash]
   d --> j[3 · Azure ML training job<br/>validate → train → evaluate → quality gate<br/>MLflow metrics]
-  j -->|gate passed| r[4 · Model registry<br/>dengue-ews-ebm vN]
+  j -->|gate passed| r[4 · Model registry<br/>dengue-ews-gam vN]
   r --> a[5 · Deploy Streamlit app<br/>Azure App Service]
   j -->|gate failed| x[stop – old model stays live]
 ```
@@ -158,7 +158,7 @@ Open **Azure ML studio** at <https://ml.azure.com>, choose workspace `mlw-dengue
 | Studio page | What you'll see | Screenshot for |
 |---|---|---|
 | **Jobs → dengue-early-warning** | each training run; **Metrics** tab: `test_pr_auc`, `test_f1`, `baseline_pr_auc`…; **Outputs + logs** tab: the quality-gate line | experiment tracking |
-| **Models → dengue-ews-ebm** | version 1, 2, … each tagged with the git commit and job | model registry / versioning |
+| **Models → dengue-ews-gam** | version 1, 2, … each tagged with the git commit and job | model registry / versioning |
 | **Data → dengue-weekly** | one version per distinct data file (content hash) | data versioning |
 | **Environments → dengue-train-env** | the pinned Python environment | reproducibility |
 | **Compute → cpu-cluster** | 0 nodes when idle | cost control |
@@ -202,6 +202,6 @@ Then open the app at **`https://<WEBAPP>.azurewebsites.net`**. The first start a
 
 ## 10. What to write in your report (MLOps section)
 
-> The project follows a CI/CD/CT MLOps design on Microsoft Azure. Source code is versioned in GitHub. Each push to `main` runs a GitHub Actions pipeline that (1) runs unit tests for data validation and temporal leakage; (2) registers the raw data as a versioned Azure ML data asset, using the file's hash as its version; (3) submits an Azure ML command job on an auto-scaling CPU cluster with a pinned environment, which validates the data, trains the tuned EBM model, evaluates it on the 2024–2026 test period and logs metrics to MLflow in the workspace; (4) applies a quality gate, so the model is registered in the Azure ML model registry only if it beats the persistence baseline on PR-AUC and F1; and (5) redeploys the Streamlit application on Azure App Service with the latest registered model. Authentication uses OpenID Connect with a managed identity, so no credentials are stored in the repository.
+> The project follows a CI/CD/CT MLOps design on Microsoft Azure. Source code is versioned in GitHub. Each push to `main` runs a GitHub Actions pipeline that (1) runs unit tests for data validation and temporal leakage; (2) registers the raw data as a versioned Azure ML data asset, using the file's hash as its version; (3) submits an Azure ML command job on an auto-scaling CPU cluster with a pinned environment, which validates the data, trains the tuned spline GAM model, evaluates it on the 2024–2026 test period and logs metrics to MLflow in the workspace; (4) applies a quality gate, so the model is registered in the Azure ML model registry only if it beats the persistence baseline on PR-AUC and F1; and (5) redeploys the Streamlit application on Azure App Service with the latest registered model. Authentication uses OpenID Connect with a managed identity, so no credentials are stored in the repository.
 
 Include the diagram at the top of this page and the screenshots from step 6.

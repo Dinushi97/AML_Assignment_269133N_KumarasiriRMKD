@@ -1,12 +1,8 @@
 {
-  "EBM (new algorithm)": {
-    "learning_rate": 0.0789329635930778,
-    "max_leaves": 4,
-    "min_samples_leaf": 11,
-    "max_bins": 39,
-    "interactions": 3,
-    "smoothing_rounds": 50,
-    "outer_bags": 8
+  "Spline GAM (new algorithm)": {
+    "n_splines": 12,
+    "lam": 60.0,
+    "n_interactions": 2
   },
   "Logistic Regression": {
     "C": 0.06672367170464207,

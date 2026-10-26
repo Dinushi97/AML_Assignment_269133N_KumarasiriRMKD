@@ -95,7 +95,7 @@ def main(argv=None):
             allf = feat.dropna(subset=FEATURES + ["high_risk"]).reset_index(drop=True)
             model = build(name, params, time_series_folds(allf, val_years=(2021, 2022, 2023, 2024, 2025))).fit(
                 allf[FEATURES], allf["high_risk"].astype(int).values)
-        bundle = {"model": model, "model_name": "Explainable Boosting Machine (EBM)" if name == NEW_ALGORITHM else name, "features": FEATURES, "feature_descriptions": FEATURE_DESCRIPTIONS,
+        bundle = {"model": model, "model_name": "Spline GAM (generalized additive model)" if name == NEW_ALGORITHM else name, "features": FEATURES, "feature_descriptions": FEATURE_DESCRIPTIONS,
                   "decision_threshold": thr, "reference": ref, "horizon_weeks": HORIZON, "reference_years": REFERENCE_YEARS,
                   "trained_on": "all labelled weeks" if args.full else f"{dev['date'].min().date()} to {dev['date'].max().date()}",
                   "test_metrics": {k: round(v, 4) for k, v in m.items()}, "version": version, "data_sha256": data_hash,

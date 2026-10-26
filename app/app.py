@@ -154,12 +154,12 @@ with tab_dist:
         tgt = alt.Chart(pd.DataFrame({"x": [row["target_date"]]})).mark_rule(color="black").encode(x="x:T")
         st.altair_chart((bars + thr_line + tgt).properties(height=260), width="stretch")
 
-    with st.expander("Why this prediction? (exact EBM explanation)", expanded=True):
+    with st.expander("Why this prediction? (exact GAM explanation)", expanded=True):
         model = bundle["model"]
         x_row = res.loc[res["district"] == district, bundle["features"]]
-        if hasattr(model, "eval_terms"):  # Explainable Boosting Machine: the prediction IS the sum of these terms
-            intercept = float(np.atleast_1d(model.intercept_)[0])
-            contrib = pd.Series(model.eval_terms(x_row)[0], index=list(model.term_names_))
+        if hasattr(model, "term_contributions"):  # spline GAM: the prediction IS the sum of these terms
+            intercept = model.intercept_
+            contrib = model.term_contributions(x_row).iloc[0]
             top = contrib.reindex(contrib.abs().sort_values(ascending=False).index).head(10)
             cdf = pd.DataFrame({"term": top.index, "contribution": top.values})
             cdf["direction"] = np.where(cdf["contribution"] > 0, "raises risk", "lowers risk")
@@ -170,11 +170,11 @@ with tab_dist:
                 tooltip=["term", alt.Tooltip("contribution:Q", format="+.3f")]).properties(height=320)
             st.altair_chart(ch, width="stretch")
             logit = intercept + contrib.sum()
-            st.caption(f"The EBM is a glass-box model: baseline {intercept:+.2f} + the sum of all {len(contrib)} term contributions "
-                       f"({contrib.sum():+.2f}) = {logit:+.2f} log-odds, which is P = {1 / (1 + np.exp(-logit)):.2f}. Terms with '&' are pairwise interactions. "
+            st.caption(f"The spline GAM is a glass-box model: baseline {intercept:+.2f} + the sum of all {len(contrib)} term contributions "
+                       f"({contrib.sum():+.2f}) = {logit:+.2f} log-odds, which is P = {1 / (1 + np.exp(-logit)):.2f}. Terms with '&' are smooth pairwise (tensor-product) interactions. "
                        "Feature values are log ratios to the district threshold: 0 means 'at threshold' and −1 means about 2.7× below it.")
         else:
-            st.info("Per-prediction explanation is available for the EBM model.")
+            st.info("Per-prediction explanation is available for the spline GAM model.")
         desc = pd.DataFrame({"feature": bundle["features"], "value": row[bundle["features"]].astype(float).round(3).values,
                              "meaning": [bundle["feature_descriptions"][f] for f in bundle["features"]]})
         st.dataframe(desc, hide_index=True, width="stretch")
@@ -204,7 +204,7 @@ with tab_perf:
         st.subheader("Test set (Jan 2024 – May 2026), never used for training or tuning")
         st.dataframe(pd.read_csv(res_path, index_col=0).round(3), width="stretch")
     figs = [("test_roc_pr.png", "ROC and precision–recall curves"), ("test_confusion_calibration.png", "Confusion matrix and calibration"),
-            ("ebm_importance.png", "EBM global term importance"), ("ebm_shape_functions.png", "EBM shape functions"), ("test_per_district.png", "Per-district performance"),
+            ("gam_importance.png", "GAM global term importance"), ("gam_shape_functions.png", "GAM shape functions with 95% intervals"), ("test_per_district.png", "Per-district performance"),
             ("test_timelines.png", "Forecasts vs actual outcomes")]
     cols = st.columns(2)
     for i, (f, cap) in enumerate(figs):

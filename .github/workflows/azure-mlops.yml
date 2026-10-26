@@ -18,7 +18,7 @@ permissions:
 env:
   RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
   WORKSPACE: ${{ vars.AZURE_ML_WORKSPACE }}
-  MODEL_NAME: dengue-ews-ebm
+  MODEL_NAME: dengue-ews-gam
 
 jobs:
   # 1 ── unit tests: data validation, leakage, purged split, saved-model/app consistency
@@ -102,13 +102,13 @@ jobs:
           fi
           az ml job download --name "$JOB" --all --download-path joblogs >/dev/null 2>&1 || true
           LOG=$(find joblogs -name "std_log*.txt" | head -1)
-          [ -n "$LOG" ] && echo "::notice title=Training result::$(grep -E 'EBM|persistence|quality gate|saved' "$LOG" | tail -c 2000 | tr '\n' ' ')" || true
+          [ -n "$LOG" ] && echo "::notice title=Training result::$(grep -E 'GAM|persistence|quality gate|saved' "$LOG" | tail -c 2000 | tr '\n' ' ')" || true
 
       - name: Register model in the Azure ML model registry
         run: |
           az ml model create --name "$MODEL_NAME" --type custom_model \
             --path "azureml://jobs/${{ steps.job.outputs.job_name }}/outputs/model_dir" \
-            --description "Dengue early-warning EBM (2-week horizon)" \
+            --description "Dengue early-warning spline GAM (2-week horizon)" \
             --tags git_sha=${{ github.sha }} job=${{ steps.job.outputs.job_name }}
 
   # 3 ── deploy the Streamlit app to Azure App Service with the newly registered model

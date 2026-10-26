@@ -1,7 +1,7 @@
 """Screen other algorithms that were not covered in the lectures and are not deep learning.
 
 Selection is by expanding-window CV (2019-2023); test PR-AUC is printed for reference only.
-Extra packages (not needed by the app or CI):  pip install ngboost==0.5.11 imodels==3.0.4 pygam==0.12.0
+Extra packages (not needed by the app or CI):  pip install ngboost==0.5.11 imodels==3.0.4
 Run:  python -m scripts.other_algorithms
 """
 import json
@@ -10,10 +10,8 @@ import warnings
 
 import numpy as np
 import pandas as pd
-from sklearn.base import clone
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis
-from sklearn.ensemble import ExtraTreesClassifier, StackingClassifier
-from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import ExtraTreesClassifier
 from sklearn.metrics import average_precision_score
 from sklearn.naive_bayes import GaussianNB
 from sklearn.pipeline import make_pipeline
@@ -32,18 +30,14 @@ Xt, yt = test[FEATURES], test["high_risk"].astype(int).values
 folds = time_series_folds(dev)
 
 
-def gam():
-    from pygam import LogisticGAM
-    class GAM(LogisticGAM):  # sklearn-style wrapper
-        def fit(self, X, y): return super().fit(np.asarray(X), y)
-        def predict_proba(self, X):
-            p = super().predict_proba(np.asarray(X)); return np.c_[1 - p, p]
-    return GAM(n_splines=10, lam=1.0)
-
-
 def rulefit():
     from imodels import RuleFitClassifier
     return RuleFitClassifier(max_rules=60, random_state=SEED)
+
+
+def figs():
+    from imodels import FIGSClassifier
+    return FIGSClassifier(max_rules=40, random_state=SEED)
 
 
 def ngboost():
@@ -52,18 +46,15 @@ def ngboost():
 
 
 CANDIDATES = {
-    "EBM (current)": lambda: make_model(NEW_ALGORITHM, params[NEW_ALGORITHM]),
+    "Spline GAM (chosen, tuned)": lambda: make_model(NEW_ALGORITHM, params[NEW_ALGORITHM]),
     "Gaussian Naive Bayes": lambda: GaussianNB(),
     "LDA": lambda: make_pipeline(StandardScaler(), LinearDiscriminantAnalysis()),
     "QDA": lambda: make_pipeline(StandardScaler(), QuadraticDiscriminantAnalysis(reg_param=0.1)),
-    "Spline GAM (pyGAM)": gam,
     "RuleFit": rulefit,
+    "FIGS (fast interpretable greedy-tree sums)": figs,
     "Extra Trees": lambda: ExtraTreesClassifier(n_estimators=400, min_samples_leaf=20, max_features=0.5,
                                                 n_jobs=-1, random_state=SEED),
     "NGBoost": ngboost,
-    "Stacking (EBM+LR+kNN+RF+XGB -> LR)": lambda: StackingClassifier(
-        [(n, make_model(n, params[n])) for n in [NEW_ALGORITHM, "Logistic Regression", "k-NN", "Random Forest", "XGBoost"]],
-        final_estimator=LogisticRegression(), cv=3, n_jobs=1),
 }
 
 if __name__ == "__main__":
