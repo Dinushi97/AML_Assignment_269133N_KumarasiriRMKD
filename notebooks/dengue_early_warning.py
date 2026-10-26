@@ -639,7 +639,25 @@ fig.suptitle("Two-week-ahead spline GAM forecasts on the test period", y=1.0); f
 # %% [markdown]
 # ### 12.1 What the results show
 #
-# RESULTS_12_1
+# | Test set (Jan 2024 – May 2026) | ROC-AUC | PR-AUC | F1 | Precision | Recall | Bal. acc. |
+# |---|---|---|---|---|---|---|
+# | **Spline GAM (new algorithm)** | **0.881** | **0.800** | **0.724** | **0.685** | 0.767 | **0.791** |
+# | Random Forest (standard) | 0.883 | 0.806 | 0.730 | 0.676 | 0.793 | 0.797 |
+# | k-NN (standard) | 0.881 | 0.805 | 0.730 | 0.631 | 0.864 | 0.800 |
+# | XGBoost (standard) | 0.883 | 0.805 | 0.735 | 0.662 | 0.826 | 0.802 |
+# | Logistic regression (standard) | 0.875 | 0.785 | 0.720 | 0.673 | 0.774 | 0.788 |
+# | Decision tree (standard) | 0.862 | 0.771 | 0.704 | 0.632 | 0.793 | 0.775 |
+# | Persistence baseline | 0.772 | 0.592 | 0.700 | 0.695 | 0.706 | 0.772 |
+# | Seasonal naive | 0.585 | 0.394 | 0.472 | 0.442 | 0.506 | 0.585 |
+#
+# 1. **The spline GAM is a useful early-warning model.** Against the persistence rule ("next is like now"), PR-AUC rises from 0.59 to 0.80 and recall from 71% to 77%, at about the same precision. F1 is higher than persistence in 99% of bootstrap resamples.
+# 2. **It is close to the black-box models.** In cross-validation its PR-AUC (0.784) is third of six, 0.004 behind XGBoost (0.787) and 0.001 behind Random Forest (0.785). On the test period it reaches 0.800, within 0.006 of the best model (Random Forest 0.806), with the same ROC-AUC as k-NN (0.881) and the **highest precision of all trained models** (0.685). Its PR-AUC confidence interval (0.765–0.833) overlaps strongly with Random Forest's (0.771–0.840). Random Forest is still ahead in 96% of bootstrap resamples, so a small gap remains, but it is about a fifth of a point on F1.
+# 3. **It is clearly better than the other interpretable standard models:** logistic regression (0.785; a GAM is its curved generalisation) and the decision tree (0.771).
+# 4. **Tuning helped modestly** (+0.009 CV PR-AUC). The penalty `lam` mattered most (importance 0.42), then the number of interactions (0.32). The search chose a strong penalty (lam ≈ 509), 16 quadratic splines per feature and one interaction (`rel_now × district_baseline`): a smooth, low-variance model with about 41 effective degrees of freedom.
+# 5. **Errors.** On 3,145 test district-weeks, the GAM caught **831** high weeks and missed **252**, raised **383** false alarms, and correctly cleared **1,679** normal weeks. The CV-chosen threshold is 0.37.
+# 6. **Hold-out point.** Colombo, week of 27 Apr 2026 (300 cases, threshold 291): P = 0.33, just *below* the 0.37 alert threshold, so the model predicted "normal". Two weeks later Colombo reported 308 cases, a HIGH week, so this single prediction was **wrong, by a narrow margin**. The case sat right at the threshold (300 vs 291 cases, then 308), the kind of borderline week where a two-week forecast is least certain. The threshold was not changed after seeing this, because that would tune the model on its own test point.
+#
+# **Why the spline GAM is the proposed model.** It is a new algorithm (not in the lectures), its accuracy is within cross-validation noise of the best black boxes and close to them on the test period, and every prediction is an exact, auditable sum of smooth curves (§13). For a public-health alert, that transparency is worth a very small loss in ranking accuracy.
 
 # %% [markdown]
 # ### 12.2 Could accuracy be higher? Other algorithms and GAM variants
@@ -657,7 +675,8 @@ print("\nSpline GAM refinements (CV PR-AUC):")
 print(ablation.round(4).to_string(index=False))
 
 # %% [markdown]
-# RESULTS_12_2
+# **Reading.** By the selection criterion (CV), the spline GAM is **2nd of 8** non-lecture algorithms, 0.001 behind NGBoost. NGBoost is a black-box gradient-boosting variant, and gradient boosting is a lecture topic. Extra Trees (a Random Forest/bagging variant) scores higher on test but lower in CV and is also a black box. RuleFit is interpretable but slightly lower in CV and about 6× slower, and its rules come from tree ensembles plus Lasso (both lecture topics). FIGS, Naive Bayes, LDA and QDA are clearly weaker.
+# None of the GAM refinements improved CV PR-AUC (range 0.781–0.784, all within noise): removing or adding interactions, monotone constraints on the level features, a 10× stronger or weaker penalty, and weighting recent years more. **The tuned GAM is kept.**
 
 # %% [markdown]
 # ## 13. Explainability
@@ -819,7 +838,21 @@ print(f"Sign agreement on LIME's top-10 features: GAM–SHAP {agree['GAM–SHAP 
 # %% [markdown]
 # ### 13.4 Interpreting the model (GAM curves, SHAP, LIME)
 #
-# RESULTS_13_4
+# **What the model has learned.** The tuned GAM has **20 terms**: 19 single-feature spline curves plus 1 tensor-product interaction, about 41 effective degrees of freedom in total.
+# 1. **The 4-week average relative to the district threshold dominates** (importance 2.71, far above any other term). Its curve rises almost linearly on the log-odds scale: from about −8 when cases are ~30× below threshold, through 0 at about 40% of the threshold, to about +9 well above it.
+# 2. **Momentum, read from the lag curves.** Holding the 4-week average fixed, the curves for cases **3 weeks ago** (0.47), **2 weeks ago** (0.34) and the **8-week average** (0.36) slope *downwards*. If the 4-week average is mostly made of older weeks, the district is past its peak and risk falls; if the same average comes from recent weeks, the outbreak is growing. The GAM has learned a smooth, readable version of the epidemic trend.
+# 3. **The national wave matters.** `share_districts_high` (0.32) and `national_growth_4w` (0.30) raise every district's risk when dengue is rising across the country.
+# 4. **The one interaction: this week's level × district burden** (0.19). In **high-burden districts** (Colombo, Gampaha; top of the surface in §13.1) a week above threshold adds up to +2 log-odds, because high counts persist there. In **small districts** the same signal points the other way: one high week is often noise that falls back.
+# 5. **Season** (`seasonal_norm`, the target-week sine/cosine) adds the post-monsoon peaks.
+#
+# **The three explanation methods agree.** Feature rankings from the GAM's own importance and from SHAP correlate at **Spearman 0.97**. On the hold-out point, SHAP has the same sign as the GAM's exact contribution on **all 10** of LIME's top features, and LIME agrees on 9 of 10. LIME's top-5 set always contains the same four core features (`rel_ma4`, `rel_lag3`, `rel_ma8`, `share_districts_high`) across five random seeds.
+#
+# **Local explanations.**
+# * **Hold-out point (Colombo, 27 Apr 2026).** Intercept −2.39 log-odds (an average week); then the 4-week average +2.36, the Colombo level × burden interaction +0.68, the national share +0.31 and this week's level +0.17; against these, Colombo's own baseline −0.60, the older weeks (3 weeks ago −0.42, the 8-week average −0.34, 2 weeks ago −0.25), and season −0.14. The total is −0.70 log-odds, so P = 0.33, just below the 0.37 alert line. Colombo then reported 308 cases (threshold 291), so this borderline forecast was wrong. The explanation shows why: the model read the older weeks as a sign the wave was flattening. Because the GAM is additive, these numbers are **exactly** the model's computation, not an approximation.
+# * **Correctly forecast onset (Anuradhapura, Jan 2024, P = 0.89):** the 4-week average had climbed near the threshold during a national wave. Two weeks later it had 29 cases against a threshold of 15.
+# * **Missed outbreak (Jaffna, Nov 2024, P = 0.26):** recent weeks were below threshold with a flat trend, and the outbreak (76 cases, threshold 64) arrived with the north-east monsoon faster than the counts showed. Sudden rises without an early signal in the counts are the model's main blind spot.
+#
+# **Alignment with domain knowledge.** Transmission persists over weeks (mosquito and virus cycles), so recent level dominates. Rising versus falling waves matter, and the lag curves encode exactly that. Epidemics are nationwide, driven by circulating serotypes. Risk peaks after the south-west (May–September) and north-east (December–February) monsoons. And persistence is stronger in dense urban districts with year-round transmission. The model reasons the way a surveillance epidemiologist would, and as a glass box every curve can be checked and challenged.
 
 # %% [markdown]
 # ## 14. Save the model and run inference on the held-out data point
@@ -859,7 +892,16 @@ print(f"Actual outcome     : {int(r['target_cases'])} cases -> {'HIGH RISK' if r
 # %% [markdown]
 # ## 15. Conclusions
 #
-# RESULTS_15
+# **Summary.** Using 20 years of official Sri Lankan dengue surveillance data, I built a two-week-ahead early-warning classifier for all 26 RDHS areas, using a **new algorithm: a spline Generalized Additive Model (GAM)**, fitted by penalised likelihood with pyGAM.
+# After a careful EDA, three kinds of data problem were found and handled (a missing week, a year of zeros for Monaragala, and 22 implausible or misaligned weekly values). Nineteen leakage-free, scale-free features were engineered.
+# The GAM was tuned with Optuna under expanding-window time-series cross-validation and compared with five standard models. On 2½ years of unseen data it reaches **ROC-AUC 0.88, PR-AUC 0.80, F1 0.72 and the highest precision of all trained models (0.68)**, far above the persistence baseline (PR-AUC 0.59) and within 0.006 PR-AUC of the best black box. Every prediction comes with an **exact explanation** as a sum of smooth curves, cross-checked with SHAP and LIME.
+#
+# **Guideline → where it's met**
+# * §1 Problem, data source, features, size, preprocessing, ethics: notebook §1–2, §4–6
+# * §2 New algorithm (spline GAM), why it was chosen, and how it differs from standard models: §8
+# * §3 Split, hyperparameters, metrics, results with tables and plots: §6.5, §9–12
+# * §4 Explainability (GAM curves as exact partial dependence, interaction surface, SHAP, LIME) and interpretation: §13
+# * §5 Critical discussion: §16 · Saved model and hold-out inference: §14 · Front-end: `app/app.py` · MLOps: `src/train.py`, `azure/`, `.github/workflows/`
 
 # %% [markdown]
 # ## 16. Critical discussion
@@ -867,9 +909,10 @@ print(f"Actual outcome     : {int(r['target_cases'])} cases -> {'HIGH RISK' if r
 # **Limitations of the model**
 # * **No weather inputs.** District rainfall and temperature are known dengue drivers with a 2–8 week lag. They weren't available as an open district-weekly series, so seasonality and national momentum stand in for them.
 # * **Fixed thresholds.** The 75th percentile for 2012–2021 is one reasonable definition of "high transmission". Others (an epidemic channel, or mean + 2 SD) would change the task. The test-period positive rate (34%) is higher than in training (20%), reflecting the post-2017 rise in dengue.
-# * **Accuracy cost of interpretability.** On the test period EBM is about 0.03 PR-AUC behind Random Forest, XGBoost and k-NN (§12.1). Further EBM tuning and eight other non-lecture algorithms didn't close the gap in CV (§12.2). The project accepts this for transparency, but it's a real cost.
-# * **Calibration.** Probabilities are used with a CV-chosen threshold (0.31), so treat them as risk scores. EBM's Brier score (0.138) is close to the other models'.
-# * **Short-term persistence carries much of the signal.** EBM adds clear value over persistence (recall +9 points), but it can't foresee outbreaks with no early signal in the counts (e.g. Monaragala, May 2024).
+# * **Small accuracy cost of interpretability.** On the test period the GAM is 0.006 PR-AUC behind Random Forest (§12.1), and Random Forest is ahead in 96% of bootstrap resamples. GAM refinements and other non-lecture algorithms didn't change the picture in CV (§12.2).
+# * **Additivity.** Apart from one chosen interaction, the GAM assumes effects add up on the log-odds scale. Interactions it was not given cannot be learned, which is part of why flexible tree ensembles keep a slight edge.
+# * **Calibration.** Probabilities are used with a CV-chosen threshold (0.37), so treat them as risk scores. The GAM's Brier score (0.133) is among the best of all models.
+# * **Short-term persistence carries much of the signal.** The GAM adds clear value over persistence (PR-AUC +0.21, recall +6 points), but it can't foresee outbreaks with no early signal in the counts, and borderline weeks (like the hold-out Colombo week, P = 0.33 vs threshold 0.37) can fall either side of the alert line.
 #
 # **Data quality issues**
 # * **A whole year recorded as zeros** (Monaragala 2020), **22 implausible or misaligned weekly values** (including the week of 30 March 2026, when counts were shifted between districts), and one missing week. These were found during EDA and handled in §6.
@@ -877,13 +920,13 @@ print(f"Actual outcome     : {int(r['target_cases'])} cases -> {'HIGH RISK' if r
 # * **Reporting delay.** Weekly reports can be revised later. The model uses the counts as published in the package.
 #
 # **Risks of bias or unfairness**
-# * **Uneven performance between districts.** F1 is high in high-burden districts (Gampaha 0.88, Monaragala 0.86, Galle 0.84) but low where high weeks are rare (Vavuniya 0.20, Mullaitivu 0.38, Kilinochchi 0.44, Badulla 0.47). If used naively, the system would give **weaker warnings to several Northern and less-resourced areas**. Those regions already have fewer health resources, so the model could widen an existing gap.
+# * **Uneven performance between districts.** F1 is high in high-burden districts (Gampaha 0.91, Monaragala 0.87, Galle 0.84) but low where high weeks are rare (Vavuniya 0.18, Mullaitivu 0.47, Kilinochchi 0.48, Badulla 0.50). If used naively, the system would give **weaker warnings to several Northern and less-resourced areas**. Those regions already have fewer health resources, so the model could widen an existing gap.
 # * **Reporting bias.** Districts with better hospital access and laboratory testing report a larger share of true cases. Their thresholds and labels are therefore more reliable. Under-reporting areas look "normal" more often than they really are.
 # * **Mitigations used or recommended:** per-district thresholds (used), per-district evaluation (§12, reported openly), district-specific decision thresholds or a lower alert threshold for low-burden districts, and keeping a human epidemiologist in the loop for every alert.
 #
 # **Real-world impact and ethical considerations**
 # * **Benefit:** two weeks of warning lets MOH and PHI teams schedule fogging, larval-source reduction and community clean-ups before cases peak, which could reduce infections, hospital load and deaths.
-# * **Cost of errors:** on the test period the model raised **477 false alarms**, which waste insecticide, staff time and public trust and add to environmental exposure and insecticide resistance. It **missed 216 high weeks**, which can mean late response and more illness. The decision threshold favours recall, because a missed outbreak usually costs more than a false alarm.
+# * **Cost of errors:** on the test period the model raised **383 false alarms**, which waste insecticide, staff time and public trust and add to environmental exposure and insecticide resistance. It **missed 252 high weeks**, which can mean late response and more illness. The decision threshold favours recall, because a missed outbreak usually costs more than a false alarm.
 # * **Decision support, not decision making.** The model should support, never replace, the Epidemiology Unit's judgement. Automation bias (trusting a score blindly) is a real risk, This is why a glass-box model was chosen: every prediction in the app comes with its exact term-by-term explanation.
 # * **Privacy and governance.** Only aggregate public data is used. Any operational deployment would need validation with the Epidemiology Unit, monitoring for drift (the weekly retraining has a quality gate), and clear communication that this is a research prototype, not an official alert system.
 #
