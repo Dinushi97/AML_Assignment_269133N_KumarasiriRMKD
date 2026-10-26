@@ -1,8 +1,9 @@
 {
   "Spline GAM (new algorithm)": {
-    "n_splines": 12,
-    "lam": 60.0,
-    "n_interactions": 2
+    "lam": 508.907343010699,
+    "n_splines": 16,
+    "spline_order": 2,
+    "n_interactions": 1
   },
   "Logistic Regression": {
     "C": 0.06672367170464207,
