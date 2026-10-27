@@ -4,7 +4,8 @@ experiment_name: dengue-early-warning
 description: Validate data -> features -> train the spline generalized additive model (GAM) with tuned params -> evaluate vs persistence -> quality gate
 code: ..
 command: >-
-  pip install --quiet --no-cache-dir -r azure/job-requirements.txt &&
+  for i in 1 2 3; do pip install --quiet --no-cache-dir --retries 10 --timeout 60 -r azure/job-requirements.txt && break; echo "pip install failed (attempt $i), retrying in 30 s"; sleep 30; done &&
+  python -c "import numpy, pandas, sklearn, pygam, mlflow" &&
   python -m src.train
   --data ${{inputs.raw_data}}
   --out ${{outputs.model_dir}}/dengue_model.pkl
